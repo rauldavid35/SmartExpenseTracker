@@ -6,283 +6,111 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.example.smartexpensetracker.ui.theme.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.smartexpensetracker.ui.theme.PrimaryGreen
+import com.example.smartexpensetracker.viewmodel.ExpensesViewModel
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import kotlin.math.abs
+
+data class LocationStat(
+    val name: String,
+    val totalSpent: Double,
+    val visitCount: Int,
+    val position: LatLng
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HeatmapScreen(onMenuClick: () -> Unit) {
-    val locations = remember {
-        listOf(
-            LocationSpending("Whole Foods Market", 487.50, "Groceries", 12),
-            LocationSpending("Shell Gas Station", 324.80, "Transport", 8),
-            LocationSpending("Starbucks", 156.90, "Food & Drink", 15),
-            LocationSpending("Target", 234.60, "Shopping", 6)
+fun HeatmapScreen(
+    onMenuClick: () -> Unit,
+    viewModel: ExpensesViewModel = viewModel()
+) {
+    val expenses by viewModel.expenses.collectAsState()
+
+    // Logic: Group expenses by location
+    val locationStats = remember(expenses) {
+        expenses
+            .filter { it.latitude != 0.0 && it.longitude != 0.0 } // Only ones with location
+            .groupBy { it.locationName.ifBlank { "Unknown Location" } } // Group by Name
+            .map { (name, list) ->
+                LocationStat(
+                    name = name,
+                    totalSpent = list.sumOf { abs(it.amount) },
+                    visitCount = list.size,
+                    // Just take the first coordinate found for this location name
+                    position = LatLng(list[0].latitude, list[0].longitude)
+                )
+            }
+            .sortedByDescending { it.totalSpent } // Sort for Top 3
+    }
+
+    val top3Locations = locationStats.take(3)
+
+    // Initial Camera (Center on first location or Default to Romania)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(
+            if (locationStats.isNotEmpty()) locationStats[0].position else LatLng(46.0, 25.0),
+            12f
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        item {
-            // Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onMenuClick,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(PrimaryGreen)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Wallet,
-                        contentDescription = "Menu",
-                        tint = Color.White
-                    )
-                }
-            }
-
-            // Title
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "Location Heatmap",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "See where you spend the most",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Stats Cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatCard(
-                    title = "Total Locations",
-                    value = "5",
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "Total Visits",
-                    value = "48",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Heatmap Visualization
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(300.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(2.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Gradient background to simulate heatmap
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        Color(0xFF34D399).copy(alpha = 0.3f),
-                                        Color(0xFF10B981).copy(alpha = 0.2f),
-                                        Color(0xFF059669).copy(alpha = 0.1f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = "Location",
-                        tint = PrimaryGreen,
-                        modifier = Modifier.size(80.dp)
-                    )
-                }
-
-                Text(
-                    text = "Interactive heatmap visualization",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier
-                        .padding(16.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Top Spending Locations Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.TrendingUp,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = TextSecondary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Top Spending Locations",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        items(locations) { location ->
-            LocationItem(location = location)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(80.dp))
-        }
-    }
-}
-
-@Composable
-fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-@Composable
-fun LocationItem(location: LocationSpending) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(1.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // Header
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(LightMint),
-                contentAlignment = Alignment.Center
+            IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryGreen)) {
+                Icon(Icons.Default.Wallet, "Menu", tint = Color.White)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("Spending Heatmap", style = MaterialTheme.typography.headlineSmall)
+        }
+
+        // The Map
+        Box(modifier = Modifier.fillMaxWidth().height(350.dp).padding(16.dp).clip(RoundedCornerShape(16.dp))) {
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState
             ) {
-                Icon(
-                    imageVector = Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = PrimaryGreen,
-                    modifier = Modifier.size(24.dp)
-                )
+                // Add Markers for all locations
+                locationStats.forEach { stat ->
+                    Marker(
+                        state = MarkerState(position = stat.position),
+                        title = stat.name,
+                        snippet = "Spent: $${String.format("%.2f", stat.totalSpent)}"
+                    )
+                }
             }
+        }
 
-            Spacer(modifier = Modifier.width(12.dp))
+        Text("Top 3 Most Visited", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = location.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${location.category} • ${location.visits} visits",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LinearProgressIndicator(
-                    progress = { (location.amount / 500).toFloat() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = PrimaryGreen,
-                    trackColor = Color(0xFFF3F4F6)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "$${String.format("%.2f", location.amount)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${location.visits} visits",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
+        // Top 3 List
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(top3Locations) { loc ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOn, null, tint = PrimaryGreen)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(loc.name, style = MaterialTheme.typography.titleMedium)
+                            Text("${loc.visitCount} visits", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                        Text("$${String.format("%.2f", loc.totalSpent)}", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
             }
         }
     }
