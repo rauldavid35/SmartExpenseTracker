@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.gms.google-services") // Add Firebase
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -79,16 +79,16 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Add this for Gemini AI
+    // Gemini AI (Kept for your Receipt/Product logic)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 
-    // Add this for Fingerprint/Face ID
+    // Fingerprint/Face ID
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
     // Location (GPS)
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
-    // Google Maps for Compose
-    implementation("com.google.maps.android:maps-compose:4.3.0")
-    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    // --- OPEN STREET MAP (Replaces Google Maps) ---
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

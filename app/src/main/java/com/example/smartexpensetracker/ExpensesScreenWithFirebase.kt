@@ -70,7 +70,7 @@ fun ExpensesScreenWithFirebase(
 
     // --- Helpers ---
     // REPLACE WITH YOUR ACTUAL API KEY
-    val geminiParser = remember { GeminiReceiptParser("AIzaSyAanvKPTnsaGLFgKHlNiuRzr3eLOGYGekc") }
+    val geminiParser = remember { GeminiReceiptParser("api_key_here") }
     val locationHelper = remember { LocationHelper(context) }
 
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
