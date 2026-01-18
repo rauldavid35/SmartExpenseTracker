@@ -1,6 +1,10 @@
 package com.example.smartexpensetracker
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -23,164 +27,107 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.smartexpensetracker.ui.theme.SmartExpenseTrackerTheme
 import com.example.smartexpensetracker.utils.BiometricPromptManager
+import com.example.smartexpensetracker.utils.ShakeDetector
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 
-// CHANGED: Inherit from FragmentActivity for Biometric support
 class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
-
-    // Initialize the Biometric Manager
     private val biometricManager by lazy { BiometricPromptManager(this) }
+
+    private lateinit var sensorManager: SensorManager
+    private var shakeDetector: ShakeDetector? = null
+
+    // 0 = None, 1 = Voice Expenses, 2 = Voice Lists, 3 = Camera Expenses
+    private var shakeTriggerAction = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        shakeDetector = ShakeDetector(
+            onShakeHorizontal = { shakeTriggerAction.intValue = 1 },
+            onShakeVertical = { shakeTriggerAction.intValue = 2 },
+            onShakeTriple = { shakeTriggerAction.intValue = 3 }
+        )
+
         setContent {
             SmartExpenseTrackerTheme {
-                // Pass the manager to the main app logic
-                MainApp(authViewModel, biometricManager)
+                MainApp(authViewModel, biometricManager, shakeTriggerAction)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        shakeDetector?.let { sensorManager.registerListener(it, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_UI) }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shakeDetector?.let { sensorManager.unregisterListener(it) }
     }
 }
 
 @Composable
 fun MainApp(
     authViewModel: AuthViewModel,
-    biometricManager: BiometricPromptManager
+    biometricManager: BiometricPromptManager,
+    shakeTrigger: MutableIntState
 ) {
     val authState by authViewModel.authState.collectAsState()
     val context = LocalContext.current
-
-    // --- Biometric State ---
-
-    // 1. Check if the user has enabled fingerprint in the past
     val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    var isBiometricEnabled by remember {
-        mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false))
-    }
-
-    // 2. Is the app "Unlocked" for this session?
-    // Starts false. Becomes true after fingerprint OR normal login.
+    var isBiometricEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false)) }
     var isAppUnlocked by remember { mutableStateOf(false) }
-
-    // 3. Dialog control
     var showEnrollmentDialog by remember { mutableStateOf(false) }
-
-    // 4. Listen for Fingerprint Results
     val biometricResult by biometricManager.promptResults.collectAsState(initial = null)
 
-    // Effect: Unlock app when fingerprint succeeds
     LaunchedEffect(biometricResult) {
-        if (biometricResult is BiometricPromptManager.BiometricResult.AuthenticationSuccess) {
-            isAppUnlocked = true
-        }
+        if (biometricResult is BiometricPromptManager.BiometricResult.AuthenticationSuccess) isAppUnlocked = true
     }
 
-    // Effect: Logic for Auto-Login or App Start
     LaunchedEffect(authState.user, isAppUnlocked) {
         if (authState.user != null && !isAppUnlocked) {
-            if (isBiometricEnabled) {
-                // Case A: Enabled -> Show prompt immediately
-                biometricManager.showBiometricPrompt(
-                    title = "Welcome Back",
-                    description = "Confirm your fingerprint to access your expenses."
-                )
-            } else {
-                // Case B: Not Enabled -> Ask to enable (Requirement)
-                showEnrollmentDialog = true
-            }
+            if (isBiometricEnabled) biometricManager.showBiometricPrompt("Welcome Back", "Confirm fingerprint")
+            else showEnrollmentDialog = true
         }
     }
 
-    // --- UI Switching ---
-
     if (authState.user == null) {
-        // SCENARIO 1: Not Logged In -> Show Login Screen
-        AuthScreen(
-            viewModel = authViewModel,
-            onAuthSuccess = {
-                // Successful login unlocks the app
-                isAppUnlocked = true
-                // If not enabled yet, ask them now
-                if (!isBiometricEnabled) showEnrollmentDialog = true
-            }
-        )
+        AuthScreen(viewModel = authViewModel, onAuthSuccess = { isAppUnlocked = true; if (!isBiometricEnabled) showEnrollmentDialog = true })
     } else if (!isAppUnlocked) {
-        // SCENARIO 2: Logged In but Locked (Waiting for Fingerprint)
-        LockedScreen(
-            onUnlockClick = {
-                if (isBiometricEnabled) {
-                    biometricManager.showBiometricPrompt(
-                        title = "Unlock App",
-                        description = "Confirm fingerprint"
-                    )
-                }
-            }
-        )
+        LockedScreen(onUnlockClick = { if (isBiometricEnabled) biometricManager.showBiometricPrompt("Unlock App", "Confirm fingerprint") })
     } else {
-        // SCENARIO 3: Unlocked -> Show the Main Content
-        MainScreen(authViewModel)
+        MainScreen(authViewModel, shakeTrigger)
     }
 
-    // --- Dialogs ---
     if (showEnrollmentDialog) {
         AlertDialog(
-            onDismissRequest = {
-                // If dismissed, we assume "No" but let them in
-                showEnrollmentDialog = false
-                isAppUnlocked = true
-            },
+            onDismissRequest = { showEnrollmentDialog = false; isAppUnlocked = true },
             title = { Text("Enable Fingerprint?") },
-            text = { Text("Would you like to use your fingerprint for faster login next time?") },
+            text = { Text("Enable fingerprint for faster login?") },
             confirmButton = {
                 Button(onClick = {
                     sharedPrefs.edit().putBoolean("biometric_enabled", true).apply()
                     isBiometricEnabled = true
-                    // Test it immediately
-                    biometricManager.showBiometricPrompt(
-                        title = "Verify Fingerprint",
-                        description = "Scan now to enable."
-                    )
+                    biometricManager.showBiometricPrompt("Verify", "Scan now")
                     showEnrollmentDialog = false
-                }) {
-                    Text("Yes, Enable")
-                }
+                }) { Text("Yes") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    showEnrollmentDialog = false
-                    isAppUnlocked = true // Let them in without it
-                }) {
-                    Text("Not Now")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showEnrollmentDialog = false; isAppUnlocked = true }) { Text("No") } }
         )
     }
 }
 
-// A simple screen shown while waiting for fingerprint
 @Composable
 fun LockedScreen(onUnlockClick: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "Locked",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Lock, "Locked", modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("App Locked", style = MaterialTheme.typography.headlineMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Waiting for biometric verification...")
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(onClick = onUnlockClick) {
-                    Text("Tap to Unlock")
-                }
+                Button(onClick = onUnlockClick) { Text("Unlock") }
             }
         }
     }
@@ -188,30 +135,29 @@ fun LockedScreen(onUnlockClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(authViewModel: AuthViewModel) {
+fun MainScreen(
+    authViewModel: AuthViewModel,
+    shakeTrigger: MutableIntState
+) {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // --- GLOBAL SHAKE LISTENER ---
+    LaunchedEffect(shakeTrigger.intValue) {
+        when (shakeTrigger.intValue) {
+            1 -> navController.navigate("expenses") { launchSingleTop = true }
+            2 -> navController.navigate("lists") { launchSingleTop = true }
+            3 -> navController.navigate("expenses") { launchSingleTop = true }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             DrawerContentWithAuth(
-                onNavigate = { route ->
-                    scope.launch {
-                        drawerState.close()
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.startDestinationId)
-                            launchSingleTop = true
-                        }
-                    }
-                },
-                onLogout = {
-                    scope.launch {
-                        drawerState.close()
-                        authViewModel.logout()
-                    }
-                }
+                onNavigate = { route -> scope.launch { drawerState.close(); navController.navigate(route) } },
+                onLogout = { scope.launch { drawerState.close(); authViewModel.logout() } }
             )
         }
     ) {
@@ -219,8 +165,6 @@ fun MainScreen(authViewModel: AuthViewModel) {
             bottomBar = {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
-
-                // Only show bottom bar on main screens
                 if (currentRoute in listOf("home", "expenses", "budget", "lists", "heatmap", "profile", "settings")) {
                     BottomNavigationBar(navController)
                 }
@@ -231,52 +175,45 @@ fun MainScreen(authViewModel: AuthViewModel) {
                 startDestination = "home",
                 modifier = Modifier.padding(paddingValues)
             ) {
-                composable("home") {
-                    HomeScreenWithFirebase(onMenuClick = { scope.launch { drawerState.open() } })
-                }
+                composable("home") { HomeScreenWithFirebase(onMenuClick = { scope.launch { drawerState.open() } }) }
+
                 composable("expenses") {
-                    ExpensesScreenWithFirebase(onMenuClick = { scope.launch { drawerState.open() } })
-                }
-                composable("budget") {
-                    BudgetScreen(onMenuClick = { scope.launch { drawerState.open() } })
+                    val isVoice = shakeTrigger.intValue == 1
+                    val isCamera = shakeTrigger.intValue == 3
+
+                    ExpensesScreenWithFirebase(
+                        onMenuClick = { scope.launch { drawerState.open() } },
+                        externalVoiceTrigger = isVoice,
+                        externalCameraTrigger = isCamera,
+                        onExternalTriggerHandled = { shakeTrigger.intValue = 0 }
+                    )
                 }
 
-                // Updated: Pass navigation lambda to open details
+                composable("budget") { BudgetScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
+
                 composable("lists") {
+                    val isVoice = shakeTrigger.intValue == 2
+
                     ListsScreenWithFirebase(
                         onMenuClick = { scope.launch { drawerState.open() } },
-                        onListClick = { listId, listName ->
-                            navController.navigate("list_detail/$listId/$listName")
-                        }
+                        onListClick = { listId, listName -> navController.navigate("list_detail/$listId/$listName") },
+                        externalVoiceTrigger = isVoice,
+                        onExternalTriggerHandled = { shakeTrigger.intValue = 0 }
                     )
                 }
 
-                // New Route: List Detail
                 composable(
                     "list_detail/{listId}/{listName}",
-                    arguments = listOf(
-                        navArgument("listId") { type = NavType.StringType },
-                        navArgument("listName") { type = NavType.StringType }
-                    )
+                    arguments = listOf(navArgument("listId") { type = NavType.StringType }, navArgument("listName") { type = NavType.StringType })
                 ) { backStackEntry ->
                     val listId = backStackEntry.arguments?.getString("listId") ?: ""
                     val listName = backStackEntry.arguments?.getString("listName") ?: "List"
-                    ListDetailScreen(
-                        listId = listId,
-                        listName = listName,
-                        onBackClick = { navController.popBackStack() }
-                    )
+                    ListDetailScreen(listId, listName, onBackClick = { navController.popBackStack() })
                 }
 
-                composable("heatmap") {
-                    HeatmapScreen(onMenuClick = { scope.launch { drawerState.open() } })
-                }
-                composable("profile") {
-                    ProfileScreen(onMenuClick = { scope.launch { drawerState.open() } })
-                }
-                composable("settings") {
-                    SettingsScreen(onMenuClick = { scope.launch { drawerState.open() } })
-                }
+                composable("heatmap") { HeatmapScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
+                composable("profile") { ProfileScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
+                composable("settings") { SettingsScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
             }
         }
     }
@@ -289,35 +226,18 @@ fun BottomNavigationBar(navController: NavHostController) {
         BottomNavItem("budget", "Budget", Icons.Default.Wallet),
         BottomNavItem("lists", "Lists", Icons.Default.List)
     )
-
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp
-    ) {
+    NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
-
         items.forEach { item ->
             NavigationBarItem(
                 icon = { Icon(item.icon, contentDescription = item.label) },
                 label = { Text(item.label) },
                 selected = currentRoute == item.route,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
+                onClick = { navController.navigate(item.route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } }
             )
         }
     }
 }
 
-data class BottomNavItem(
-    val route: String,
-    val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)
+data class BottomNavItem(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)

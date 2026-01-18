@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Wallet
@@ -59,17 +60,19 @@ import kotlin.math.abs
 @Composable
 fun ExpensesScreenWithFirebase(
     onMenuClick: () -> Unit,
-    viewModel: ExpensesViewModel = viewModel()
+    viewModel: ExpensesViewModel = viewModel(),
+    // Added params to allow external triggers (from Shake in MainActivity)
+    externalVoiceTrigger: Boolean = false,
+    externalCameraTrigger: Boolean = false,
+    onExternalTriggerHandled: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // ViewModel Data
     val expenses by viewModel.expenses.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // --- Helpers ---
-    // REPLACE WITH YOUR ACTUAL API KEY
+    // Helpers
     val geminiParser = remember { GeminiReceiptParser("api_key_here") }
     val locationHelper = remember { LocationHelper(context) }
 
@@ -79,29 +82,63 @@ fun ExpensesScreenWithFirebase(
     val imageCapture = remember { ImageCapture.Builder().build() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    // --- UI States ---
+    // UI States
     var showAddDialog by remember { mutableStateOf(false) }
-    var showLocationDialog by remember { mutableStateOf(false) } // NEW: Ask for location
+    var showLocationDialog by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var showScannedTextDialog by remember { mutableStateOf(false) }
     var isProcessingAI by remember { mutableStateOf(false) }
+    var showVoiceInput by remember { mutableStateOf(false) }
 
-    // Toggle for Scan Mode (True = Receipt, False = Product)
     var isReceiptMode by remember { mutableStateOf(true) }
 
-    // --- Form Data ---
+    // Form Data (NO CATEGORY as requested)
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Misc") }
+    // Category is now hidden default
+    val defaultCategory = "Misc"
     var isExpense by remember { mutableStateOf(true) }
     var scannedRawText by remember { mutableStateOf("") }
-    var detectedAddress by remember { mutableStateOf("") } // NEW: Address from AI
+    var detectedAddress by remember { mutableStateOf("") }
 
-    // --- Edit Mode ---
     var selectedExpense by remember { mutableStateOf<ExpenseTransaction?>(null) }
     val isEditing = selectedExpense != null
 
-    // --- Gallery Launcher ---
+    // --- HANDLE EXTERNAL TRIGGERS (SHAKE) ---
+    LaunchedEffect(externalVoiceTrigger) {
+        if (externalVoiceTrigger) {
+            showVoiceInput = true
+            onExternalTriggerHandled()
+        }
+    }
+    LaunchedEffect(externalCameraTrigger) {
+        if (externalCameraTrigger) {
+            if (cameraPermission.status.isGranted) showCamera = true
+            else cameraPermission.launchPermissionRequest()
+            onExternalTriggerHandled()
+        }
+    }
+
+    // --- LOGIC: Voice Parsing ---
+    fun processVoiceCommand(text: String) {
+        // Logic: "Name" then "Amount"
+        // Heuristic: Extract the first number found as amount
+        val numberRegex = Regex("[0-9]+(\\.[0-9]+)?")
+        val match = numberRegex.find(text)
+
+        if (match != null) {
+            amount = match.value
+            // Remove the amount from the text to get the name
+            name = text.replace(match.value, "").trim()
+        } else {
+            name = text
+            amount = ""
+        }
+
+        isExpense = true
+        showAddDialog = true
+    }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -117,7 +154,7 @@ fun ExpensesScreenWithFirebase(
                     isProcessingAI = false
                     if (merchant != null) {
                         name = merchant
-                        detectedAddress = address ?: "" // Capture address
+                        detectedAddress = address ?: ""
                         amount = total?.toString() ?: ""
                         showAddDialog = true
                     } else {
@@ -134,13 +171,21 @@ fun ExpensesScreenWithFirebase(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            // --- Top Bar ---
+            // Top Bar
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryGreen)) {
                     Icon(Icons.Default.Wallet, "Menu", tint = Color.White)
                 }
                 Text("Expenses", style = MaterialTheme.typography.headlineSmall)
                 Row {
+                    // Voice Button
+                    IconButton(
+                        onClick = { showVoiceInput = true },
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint)
+                    ) {
+                        Icon(Icons.Default.Mic, "Voice", tint = PrimaryGreen)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
                         onClick = {
                             if (cameraPermission.status.isGranted) showCamera = true
@@ -168,7 +213,7 @@ fun ExpensesScreenWithFirebase(
                 }
             }
 
-            // --- Summary ---
+            // Summary
             Row(modifier = Modifier.padding(16.dp)) {
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp)) { Text("Expenses", color = TextSecondary); Text("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge) }
@@ -181,7 +226,7 @@ fun ExpensesScreenWithFirebase(
 
             if (isLoading) Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-            // --- List ---
+            // List
             LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(expenses) { transaction ->
                     Card(
@@ -191,15 +236,14 @@ fun ExpensesScreenWithFirebase(
                             name = transaction.name
                             amount = abs(transaction.amount).toString()
                             isExpense = transaction.amount < 0
-                            category = transaction.category
-                            detectedAddress = transaction.locationName // Load existing loc
+                            detectedAddress = transaction.locationName
                             showAddDialog = true
                         }
                     ) {
                         Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(transaction.name, style = MaterialTheme.typography.titleMedium)
-                                Text(if (transaction.locationName.isNotEmpty()) "${transaction.category} • ${transaction.locationName}" else transaction.category, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                Text(if (transaction.locationName.isNotEmpty()) "Misc • ${transaction.locationName}" else "Misc", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                             }
                             Text(text = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}", color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed, style = MaterialTheme.typography.titleMedium)
                         }
@@ -208,7 +252,18 @@ fun ExpensesScreenWithFirebase(
             }
         }
 
-        // --- Add/Edit Dialog ---
+        // Voice Dialog
+        if (showVoiceInput) {
+            VoiceInputDialog(
+                onTextReceived = { text ->
+                    processVoiceCommand(text)
+                    showVoiceInput = false
+                },
+                onDismiss = { showVoiceInput = false }
+            )
+        }
+
+        // Add/Edit Dialog (NO CATEGORY)
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; selectedExpense = null },
@@ -230,6 +285,7 @@ fun ExpensesScreenWithFirebase(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
+                        // Removed Category input UI
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = isExpense, onCheckedChange = { isExpense = it })
@@ -249,10 +305,8 @@ fun ExpensesScreenWithFirebase(
                                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) { Text("Delete") }
                         }
-
                         Button(
                             onClick = {
-                                // Instead of saving immediately, ask for Location
                                 showAddDialog = false
                                 showLocationDialog = true
                             },
@@ -264,29 +318,22 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // --- NEW: Location Choice Dialog ---
+        // Location Dialog
         if (showLocationDialog) {
             AlertDialog(
-                onDismissRequest = { /* Prevent dismiss, force choice */ },
+                onDismissRequest = { },
                 title = { Text("Add Location?") },
                 text = { Text("Where did this transaction happen?") },
                 confirmButton = {
-                    // Option 1: GPS
                     Button(onClick = {
                         if (locationPermission.status.isGranted) {
                             scope.launch {
                                 val coords = locationHelper.getCurrentLocation()
                                 val lat = coords?.first ?: 0.0
                                 val lng = coords?.second ?: 0.0
+                                val realAddressName = if (lat != 0.0) locationHelper.getAddressFromCoordinates(lat, lng) else "My GPS Location"
 
-                                // Reverse Geocode to get address name if possible
-                                val realAddressName = if (lat != 0.0) {
-                                    locationHelper.getAddressFromCoordinates(lat, lng)
-                                } else {
-                                    "My GPS Location"
-                                }
-
-                                saveTransaction(viewModel, selectedExpense, name, amount, category, isExpense, realAddressName, lat, lng)
+                                saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, realAddressName, lat, lng)
                                 showLocationDialog = false
                                 selectedExpense = null
                             }
@@ -297,20 +344,18 @@ fun ExpensesScreenWithFirebase(
                 },
                 dismissButton = {
                     Row {
-                        // Option 2: Receipt Address (if exists)
                         if (detectedAddress.isNotBlank()) {
                             TextButton(onClick = {
                                 scope.launch(Dispatchers.IO) {
                                     val coords = locationHelper.getCoordinatesFromAddress(detectedAddress)
-                                    saveTransaction(viewModel, selectedExpense, name, amount, category, isExpense, detectedAddress, coords?.first ?: 0.0, coords?.second ?: 0.0)
+                                    saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, detectedAddress, coords?.first ?: 0.0, coords?.second ?: 0.0)
                                     showLocationDialog = false
                                     selectedExpense = null
                                 }
-                            }) { Text("Use Receipt Address") }
+                            }) { Text("Use Receipt Addr") }
                         }
-                        // Option 3: Skip
                         TextButton(onClick = {
-                            saveTransaction(viewModel, selectedExpense, name, amount, category, isExpense, "", 0.0, 0.0)
+                            saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, "", 0.0, 0.0)
                             showLocationDialog = false
                             selectedExpense = null
                         }) { Text("Skip") }
@@ -319,7 +364,7 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // --- Fallback Text Dialog ---
+        // Fallback Dialog
         if (showScannedTextDialog) {
             AlertDialog(
                 onDismissRequest = { showScannedTextDialog = false },
@@ -335,7 +380,7 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // --- Loading ---
+        // Loading
         if (isProcessingAI) {
             Dialog(onDismissRequest = {}) {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
@@ -344,13 +389,11 @@ fun ExpensesScreenWithFirebase(
             }
         }
 
-        // --- Camera Overlay ---
+        // Camera Overlay
         if (showCamera) {
             Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                     CameraPreview(modifier = Modifier.fillMaxSize(), imageCapture = imageCapture)
-
-                    // Top: Toggle
                     Row(
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
                         verticalAlignment = Alignment.CenterVertically
@@ -362,8 +405,6 @@ fun ExpensesScreenWithFirebase(
                             Icon(Icons.Default.ShoppingBag, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Product")
                         }
                     }
-
-                    // Bottom: Controls
                     Row(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -389,7 +430,6 @@ fun ExpensesScreenWithFirebase(
                         }, contentAlignment = Alignment.Center) { Box(modifier = Modifier.size(60.dp).background(Color.White, CircleShape)) }
                         Spacer(modifier = Modifier.size(48.dp))
                     }
-
                     IconButton(onClick = { showCamera = false }, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) { Text("X", color = Color.White, style = MaterialTheme.typography.titleLarge) }
                 }
             }
@@ -399,7 +439,6 @@ fun ExpensesScreenWithFirebase(
 
 // --- Helper Functions ---
 
-// Helper to save or update
 fun saveTransaction(
     viewModel: ExpensesViewModel,
     selectedExpense: ExpenseTransaction?,
@@ -415,11 +454,8 @@ fun saveTransaction(
     val finalAmount = if (isExpense) -amountVal else amountVal
 
     if (selectedExpense != null) {
-        // Edit existing (Note: ExpensesViewModel edit needs update to support loc, or just basic update)
         viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
-        // If you want to update location on edit, you'd need to add those params to editExpense in VM
     } else {
-        // Add new
         viewModel.addExpense(name, finalAmount, category, locationName, lat, lng)
     }
 }
@@ -431,13 +467,11 @@ fun processImage(
     geminiParser: GeminiReceiptParser,
     scope: kotlinx.coroutines.CoroutineScope,
     onLoading: () -> Unit,
-    // Updated callback signature to include Address
     onComplete: (String?, String?, Double?, String) -> Unit
 ) {
     onLoading()
 
     if (isReceiptMode) {
-        // RECEIPT MODE
         try {
             val image = InputImage.fromFilePath(context, uri)
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -452,7 +486,6 @@ fun processImage(
                 .addOnFailureListener { onComplete(null, null, null, "OCR Failed") }
         } catch (e: IOException) { onComplete(null, null, null, "Error") }
     } else {
-        // PRODUCT MODE
         scope.launch {
             try {
                 val inputStream = context.contentResolver.openInputStream(uri)

@@ -52,10 +52,15 @@ class ListsViewModel : ViewModel() {
             }
     }
 
-    fun addList(name: String) {
+    // UPDATED: Added callback to return the new List ID
+    fun addList(name: String, onComplete: ((String) -> Unit)? = null) {
         val userId = auth.currentUser?.uid ?: return
         val list = ShoppingListData(name = name, itemCount = 0, date = System.currentTimeMillis())
+
         db.collection("users").document(userId).collection("shopping_lists").add(list)
+            .addOnSuccessListener { documentReference ->
+                onComplete?.invoke(documentReference.id)
+            }
     }
 
     fun renameList(id: String, newName: String) {
