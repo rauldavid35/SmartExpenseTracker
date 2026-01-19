@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">SmartExpenseTracker</string>
+
+    <string name="shortcut_short_voice_expense">Add Expense</string>
+    <string name="shortcut_long_voice_expense">Add Expense via Voice</string>
+
+    <string name="shortcut_short_camera">Scan Receipt</string>
+    <string name="shortcut_long_camera">Scan Receipt with Camera</string>
+
+    <string name="shortcut_short_list">Create List</string>
+    <string name="shortcut_long_list">Create Shopping List</string>
 </resources>

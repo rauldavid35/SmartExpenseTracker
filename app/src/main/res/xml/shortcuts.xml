@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="voice_expense"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_short_voice_expense"
+        android:shortcutLongLabel="@string/shortcut_long_voice_expense">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.smartexpensetracker"
+            android:targetClass="com.example.smartexpensetracker.MainActivity">
+            <extra android:name="SHORTCUT_ACTION" android:value="voice_expense" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="camera_expense"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_short_camera"
+        android:shortcutLongLabel="@string/shortcut_long_camera">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.smartexpensetracker"
+            android:targetClass="com.example.smartexpensetracker.MainActivity">
+            <extra android:name="SHORTCUT_ACTION" android:value="camera_expense" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="voice_list"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_short_list"
+        android:shortcutLongLabel="@string/shortcut_long_list">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.smartexpensetracker"
+            android:targetClass="com.example.smartexpensetracker.MainActivity">
+            <extra android:name="SHORTCUT_ACTION" android:value="voice_list" />
+        </intent>
+    </shortcut>
+</shortcuts>
