@@ -13,7 +13,7 @@ data class ExpenseTransaction(
     val amount: Double = 0.0,
     val category: String = "",
     val date: Long = 0L,
-    // NEW: Location Fields for Heatmap
+    //Location Fields for Heatmap
     val locationName: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0

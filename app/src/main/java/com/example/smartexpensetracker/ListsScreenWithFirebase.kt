@@ -53,7 +53,7 @@ fun ListsScreenWithFirebase(
     }
 
     // --- LOGIC: Parse Voice Command ---
-    // Format: "List [My List Name] item [Item 1] item [Item 2]"
+    // Format: "[My List Name] item [Item 1] item [Item 2]"
     // Example: "Grocery Store item Eggs item Milk"
     // Result: List Name = "Grocery Store", Items = ["Eggs", "Milk"]
     fun processListVoiceCommand(text: String) {
@@ -61,7 +61,6 @@ fun ListsScreenWithFirebase(
         val lowerText = text.lowercase()
 
         // 1. Clean up "list" keyword if present at start
-        // Be robust: Check if it starts with "list " (with space) to avoid partial matches
         val content = if (lowerText.startsWith("list ")) text.substring(5).trim() else text
 
         // 2. Split by "item" keyword

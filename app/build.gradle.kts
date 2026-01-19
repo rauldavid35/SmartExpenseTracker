@@ -79,7 +79,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Gemini AI (Kept for your Receipt/Product logic)
+    // Gemini AI
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 
     // Fingerprint/Face ID

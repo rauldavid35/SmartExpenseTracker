@@ -92,7 +92,7 @@ fun ExpensesScreenWithFirebase(
 
     var isReceiptMode by remember { mutableStateOf(true) }
 
-    // Form Data (NO CATEGORY as requested)
+    // Form Data
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     // Category is now hidden default

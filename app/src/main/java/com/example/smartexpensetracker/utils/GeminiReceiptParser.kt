@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-// --- THIS IS THE DATA CLASS YOU ASKED FOR ---
+
 data class ReceiptResult(
     val merchant: String,
     val address: String?, // Added this field for the heatmap
