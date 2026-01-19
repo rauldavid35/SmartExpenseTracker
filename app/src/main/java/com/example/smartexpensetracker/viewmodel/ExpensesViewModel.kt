@@ -6,6 +6,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.text.SimpleDateFormat
+import java.util.*
 
 data class ExpenseTransaction(
     val id: String = "",
@@ -13,7 +15,6 @@ data class ExpenseTransaction(
     val amount: Double = 0.0,
     val category: String = "",
     val date: Long = 0L,
-    //Location Fields for Heatmap
     val locationName: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0
@@ -26,11 +27,15 @@ class ExpensesViewModel : ViewModel() {
     private val _expenses = MutableStateFlow<List<ExpenseTransaction>>(emptyList())
     val expenses: StateFlow<List<ExpenseTransaction>> = _expenses.asStateFlow()
 
+    private val _categories = MutableStateFlow<List<String>>(emptyList())
+    val categories: StateFlow<List<String>> = _categories.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     init {
         fetchExpenses()
+        fetchCategories()
     }
 
     private fun fetchExpenses() {
@@ -46,7 +51,19 @@ class ExpensesViewModel : ViewModel() {
             }
     }
 
-    // Updated to accept Location Data
+    private fun fetchCategories() {
+        val userId = auth.currentUser?.uid ?: return
+        val currentMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+        db.collection("users").document(userId).collection("budgets").document(currentMonth)
+            .collection("categorySettings")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val list = snapshot.documents.map { it.id }
+                    _categories.value = list
+                }
+            }
+    }
+
     fun addExpense(
         name: String,
         amount: Double,

@@ -70,6 +70,7 @@ fun ExpensesScreenWithFirebase(
     val scope = rememberCoroutineScope()
 
     val expenses by viewModel.expenses.collectAsState()
+    val availableCategories by viewModel.categories.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     // Helpers
@@ -95,8 +96,7 @@ fun ExpensesScreenWithFirebase(
     // Form Data
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    // Category is now hidden default
-    val defaultCategory = "Misc"
+    var selectedCategoryName by remember { mutableStateOf("Misc") }
     var isExpense by remember { mutableStateOf(true) }
     var scannedRawText by remember { mutableStateOf("") }
     var detectedAddress by remember { mutableStateOf("") }
@@ -201,6 +201,7 @@ fun ExpensesScreenWithFirebase(
                             selectedExpense = null
                             name = ""
                             amount = ""
+                            selectedCategoryName = if (availableCategories.isNotEmpty()) availableCategories[0] else "Misc"
                             isExpense = true
                             detectedAddress = ""
                             showAddDialog = true
@@ -235,6 +236,7 @@ fun ExpensesScreenWithFirebase(
                             selectedExpense = transaction
                             name = transaction.name
                             amount = abs(transaction.amount).toString()
+                            selectedCategoryName = transaction.category
                             isExpense = transaction.amount < 0
                             detectedAddress = transaction.locationName
                             showAddDialog = true
@@ -243,7 +245,7 @@ fun ExpensesScreenWithFirebase(
                         Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(transaction.name, style = MaterialTheme.typography.titleMedium)
-                                Text(if (transaction.locationName.isNotEmpty()) "Misc • ${transaction.locationName}" else "Misc", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                Text("${transaction.category}${if (transaction.locationName.isNotEmpty()) " • ${transaction.locationName}" else ""}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                             }
                             Text(text = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}", color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed, style = MaterialTheme.typography.titleMedium)
                         }
@@ -263,7 +265,7 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Add/Edit Dialog (NO CATEGORY)
+        // Add/Edit Dialog
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; selectedExpense = null },
@@ -285,11 +287,54 @@ fun ExpensesScreenWithFirebase(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        // Removed Category input UI
+                        
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = isExpense, onCheckedChange = { isExpense = it })
                             Text("Is Expense?")
+                        }
+
+                        if (isExpense) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // CATEGORY DROPDOWN LOGIC
+                            if (availableCategories.isEmpty()) {
+                                OutlinedTextField(
+                                    value = selectedCategoryName,
+                                    onValueChange = { selectedCategoryName = it },
+                                    label = { Text("Category (Free Text)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                var expanded by remember { mutableStateOf(false) }
+                                ExposedDropdownMenuBox(
+                                    expanded = expanded,
+                                    onExpandedChange = { expanded = !expanded }
+                                ) {
+                                    OutlinedTextField(
+                                        value = selectedCategoryName,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("Select Category") },
+                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                                    )
+                                    ExposedDropdownMenu(
+                                        expanded = expanded,
+                                        onDismissRequest = { expanded = false }
+                                    ) {
+                                        availableCategories.forEach { category ->
+                                            DropdownMenuItem(
+                                                text = { Text(category) },
+                                                onClick = {
+                                                    selectedCategoryName = category
+                                                    expanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -307,6 +352,10 @@ fun ExpensesScreenWithFirebase(
                         }
                         Button(
                             onClick = {
+                                // Force category to "Income" if it's not an expense
+                                if (!isExpense) {
+                                    selectedCategoryName = "Income"
+                                }
                                 showAddDialog = false
                                 showLocationDialog = true
                             },
@@ -333,7 +382,7 @@ fun ExpensesScreenWithFirebase(
                                 val lng = coords?.second ?: 0.0
                                 val realAddressName = if (lat != 0.0) locationHelper.getAddressFromCoordinates(lat, lng) else "My GPS Location"
 
-                                saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, realAddressName, lat, lng)
+                                saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, realAddressName, lat, lng)
                                 showLocationDialog = false
                                 selectedExpense = null
                             }
@@ -348,14 +397,14 @@ fun ExpensesScreenWithFirebase(
                             TextButton(onClick = {
                                 scope.launch(Dispatchers.IO) {
                                     val coords = locationHelper.getCoordinatesFromAddress(detectedAddress)
-                                    saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, detectedAddress, coords?.first ?: 0.0, coords?.second ?: 0.0)
+                                    saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, detectedAddress, coords?.first ?: 0.0, coords?.second ?: 0.0)
                                     showLocationDialog = false
                                     selectedExpense = null
                                 }
                             }) { Text("Use Receipt Addr") }
                         }
                         TextButton(onClick = {
-                            saveTransaction(viewModel, selectedExpense, name, amount, defaultCategory, isExpense, "", 0.0, 0.0)
+                            saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, "", 0.0, 0.0)
                             showLocationDialog = false
                             selectedExpense = null
                         }) { Text("Skip") }

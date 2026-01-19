@@ -9,7 +9,7 @@ import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.lifecycleScope // Import needed for the timer
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -32,9 +33,9 @@ import com.example.smartexpensetracker.ui.theme.SmartExpenseTrackerTheme
 import com.example.smartexpensetracker.utils.BiometricPromptManager
 import com.example.smartexpensetracker.utils.ShakeDetector
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
-import kotlinx.coroutines.Job // Import needed
-import kotlinx.coroutines.delay // Import needed
-import kotlinx.coroutines.launch // Import needed
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
@@ -43,26 +44,17 @@ class MainActivity : FragmentActivity() {
     private lateinit var sensorManager: SensorManager
     private var shakeDetector: ShakeDetector? = null
 
-    // 0 = None
-    // 1 = Voice Expense (Single Vol Up)
-    // 2 = Voice List (Double Vol Up)
-    // 3 = Camera Expense (Vol Down)
-    // 99 = Shake Detected
     private var triggerAction = mutableIntStateOf(0)
-
-    // Timer Job for the Double Tap logic
     private var volumeUpJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Setup Universal Shake
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         shakeDetector = ShakeDetector {
             triggerAction.intValue = 99
         }
 
-        // 2. Check for App Shortcuts
         handleIntent(intent)
 
         setContent {
@@ -72,30 +64,24 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    // --- NEW "SMART" VOLUME BUTTON LOGIC ---
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (event?.repeatCount == 0) { // Only catch the first 'down' event
+        if (event?.repeatCount == 0) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     if (volumeUpJob?.isActive == true) {
-                        // CASE: DOUBLE TAP DETECTED
-                        // User pressed again while we were waiting.
-                        volumeUpJob?.cancel() // Cancel the Single Tap action
+                        volumeUpJob?.cancel()
                         volumeUpJob = null
-                        triggerAction.intValue = 2 // Go to Lists immediately
+                        triggerAction.intValue = 2
                     } else {
-                        // CASE: FIRST TAP
-                        // Start a timer. If it finishes, it's a Single Tap.
                         volumeUpJob = lifecycleScope.launch {
-                            delay(400) // Wait 400ms for a second press
-                            triggerAction.intValue = 1 // No second press? Go to Expenses
+                            delay(400)
+                            triggerAction.intValue = 1
                             volumeUpJob = null
                         }
                     }
-                    return true // Block system volume change
+                    return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    // Volume Down -> Camera (Instant)
                     triggerAction.intValue = 3
                     return true
                 }
@@ -103,7 +89,6 @@ class MainActivity : FragmentActivity() {
         }
         return super.onKeyDown(keyCode, event)
     }
-    // ---------------------------------------
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
@@ -206,22 +191,12 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     var showShakeMenu by remember { mutableStateOf(false) }
 
-    // --- TRIGGER HANDLER ---
     LaunchedEffect(triggerAction.intValue) {
         when (triggerAction.intValue) {
-            1 -> { // Voice Expense
-                navController.navigate("expenses") { launchSingleTop = true }
-            }
-            2 -> { // Voice List
-                navController.navigate("lists") { launchSingleTop = true }
-            }
-            3 -> { // Camera Expense
-                navController.navigate("expenses") { launchSingleTop = true }
-            }
-            99 -> { // Shake Detected
-                showShakeMenu = true
-                triggerAction.intValue = 0 // Reset to avoid loop
-            }
+            1 -> { navController.navigate("expenses") { launchSingleTop = true } }
+            2 -> { navController.navigate("lists") { launchSingleTop = true } }
+            3 -> { navController.navigate("expenses") { launchSingleTop = true } }
+            99 -> { showShakeMenu = true; triggerAction.intValue = 0 }
         }
     }
 
@@ -229,7 +204,7 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             DrawerContentWithAuth(
-                onNavigate = { route -> scope.launch { drawerState.close(); navController.navigate(route) } },
+                onNavigate = { route -> scope.launch { drawerState.close(); navController.navigate(route) { popUpTo(navController.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true } } },
                 onLogout = { scope.launch { drawerState.close(); authViewModel.logout() } }
             )
         }
@@ -249,43 +224,31 @@ fun MainScreen(
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable("home") { HomeScreenWithFirebase(onMenuClick = { scope.launch { drawerState.open() } }) }
-
                 composable("expenses") {
-                    val isVoice = triggerAction.intValue == 1
-                    val isCamera = triggerAction.intValue == 3
-
                     ExpensesScreenWithFirebase(
                         onMenuClick = { scope.launch { drawerState.open() } },
-                        externalVoiceTrigger = isVoice,
-                        externalCameraTrigger = isCamera,
+                        externalVoiceTrigger = triggerAction.intValue == 1,
+                        externalCameraTrigger = triggerAction.intValue == 3,
                         onExternalTriggerHandled = { triggerAction.intValue = 0 }
                     )
                 }
-
                 composable("budget") { BudgetScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
-
                 composable("lists") {
-                    val isVoice = triggerAction.intValue == 2
                     ListsScreenWithFirebase(
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onListClick = { listId, listName -> navController.navigate("list_detail/$listId/$listName") },
-                        externalVoiceTrigger = isVoice,
+                        externalVoiceTrigger = triggerAction.intValue == 2,
                         onExternalTriggerHandled = { triggerAction.intValue = 0 }
                     )
                 }
-
                 composable(
                     "list_detail/{listId}/{listName}",
-                    arguments = listOf(
-                        navArgument("listId") { type = NavType.StringType },
-                        navArgument("listName") { type = NavType.StringType }
-                    )
+                    arguments = listOf(navArgument("listId") { type = NavType.StringType }, navArgument("listName") { type = NavType.StringType })
                 ) { backStackEntry ->
                     val listId = backStackEntry.arguments?.getString("listId") ?: ""
                     val listName = backStackEntry.arguments?.getString("listName") ?: "List"
                     ListDetailScreen(listId, listName, onBackClick = { navController.popBackStack() })
                 }
-
                 composable("heatmap") { HeatmapScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
                 composable("profile") { ProfileScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
                 composable("settings") { SettingsScreen(onMenuClick = { scope.launch { drawerState.open() } }) }
@@ -293,39 +256,17 @@ fun MainScreen(
         }
     }
 
-    // --- POPUP MENU FOR SHAKE ---
     if (showShakeMenu) {
         Dialog(onDismissRequest = { showShakeMenu = false }) {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Quick Actions", style = MaterialTheme.typography.headlineSmall, color = PrimaryGreen)
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    QuickActionBtn("Add Expense", Icons.Default.Mic) {
-                        showShakeMenu = false
-                        triggerAction.intValue = 1
-                    }
-
+                    QuickActionBtn("Add Expense", Icons.Default.Mic) { showShakeMenu = false; triggerAction.intValue = 1 }
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    QuickActionBtn("Scan Receipt", Icons.Default.CameraAlt) {
-                        showShakeMenu = false
-                        triggerAction.intValue = 3
-                    }
-
+                    QuickActionBtn("Scan Receipt", Icons.Default.CameraAlt) { showShakeMenu = false; triggerAction.intValue = 3 }
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    QuickActionBtn("Create List", Icons.Default.List) {
-                        showShakeMenu = false
-                        triggerAction.intValue = 2
-                    }
+                    QuickActionBtn("Create List", Icons.Default.List) { showShakeMenu = false; triggerAction.intValue = 2 }
                 }
             }
         }
@@ -334,15 +275,8 @@ fun MainScreen(
 
 @Composable
 fun QuickActionBtn(text: String, icon: ImageVector, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Icon(icon, null)
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text, style = MaterialTheme.typography.titleMedium)
+    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen), shape = RoundedCornerShape(16.dp)) {
+        Icon(icon, null); Spacer(modifier = Modifier.width(12.dp)); Text(text, style = MaterialTheme.typography.titleMedium)
     }
 }
 
@@ -361,7 +295,13 @@ fun BottomNavigationBar(navController: NavHostController) {
                 icon = { Icon(item.icon, contentDescription = item.label) },
                 label = { Text(item.label) },
                 selected = currentRoute == item.route,
-                onClick = { navController.navigate(item.route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } }
+                onClick = {
+                    navController.navigate(item.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             )
         }
     }
