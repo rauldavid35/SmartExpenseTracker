@@ -55,6 +55,8 @@ import java.util.concurrent.Executors
 import java.util.Locale
 import java.util.Currency
 import kotlin.math.abs
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -74,7 +76,7 @@ fun ExpensesScreenWithFirebase(
     val isLoading by viewModel.isLoading.collectAsState()
 
     // Helpers
-    val geminiParser = remember { GeminiReceiptParser("key") }
+    val geminiParser = remember { GeminiReceiptParser("AIzaSyCTgFegC05nYue48PETjZpuOnBraG0f8lU") }
     val locationHelper = remember { LocationHelper(context) }
 
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -298,42 +300,152 @@ fun ExpensesScreenWithFirebase(
                         }
 
                         if (isExpense) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // CATEGORY DROPDOWN LOGIC
-                            if (availableCategories.isEmpty()) {
-                                OutlinedTextField(
-                                    value = selectedCategoryName,
-                                    onValueChange = { selectedCategoryName = it },
-                                    label = { Text("Category (Free Text)") },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } else {
+                            var expanded by remember { mutableStateOf(false) }
+                            var showNewCategoryField by remember { mutableStateOf(false) }
+                            var newCategoryName by remember { mutableStateOf("") }
+
+                            if (isExpense) {
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // State-uri locale necesare pentru acest switch (asigură-te că sunt în interiorul dialogului sau la nivel de screen)
                                 var expanded by remember { mutableStateOf(false) }
-                                ExposedDropdownMenuBox(
-                                    expanded = expanded,
-                                    onExpandedChange = { expanded = !expanded }
-                                ) {
-                                    OutlinedTextField(
-                                        value = selectedCategoryName,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("Select Category") },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                                    )
-                                    ExposedDropdownMenu(
+                                var showNewCategoryField by remember { mutableStateOf(false) }
+                                var newCategoryName by remember { mutableStateOf("") }
+
+                                if (!showNewCategoryField) {
+                                    ExposedDropdownMenuBox(
                                         expanded = expanded,
-                                        onDismissRequest = { expanded = false }
+                                        onExpandedChange = { expanded = !expanded }
                                     ) {
-                                        availableCategories.forEach { category ->
+                                        OutlinedTextField(
+                                            value = selectedCategoryName,
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            label = { Text("Select Category") },
+                                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                            // menuAnchor() este esențial pentru poziționarea corectă a meniului
+                                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = expanded,
+                                            onDismissRequest = { expanded = false }
+                                        ) {
+                                            // Listăm categoriile venite din Repository
+                                            availableCategories.forEach { category ->
+                                                DropdownMenuItem(
+                                                    text = { Text(category) },
+                                                    onClick = {
+                                                        selectedCategoryName = category
+                                                        expanded = false
+                                                    }
+                                                )
+                                            }
+
+                                            // Linie fină de separare
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                                            // Butonul de adăugare categorie nouă
                                             DropdownMenuItem(
-                                                text = { Text(category) },
+                                                text = {
+                                                    Text(
+                                                        "+ Add New Category",
+                                                        color = PrimaryGreen,
+                                                        style = MaterialTheme.typography.labelLarge
+                                                    )
+                                                },
                                                 onClick = {
-                                                    selectedCategoryName = category
+                                                    showNewCategoryField = true
                                                     expanded = false
                                                 }
                                             )
+                                        }
+                                    }
+                                } else {
+                                    // Câmp pentru adăugare categorie nouă "on the fly"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = newCategoryName,
+                                            onValueChange = { newCategoryName = it },
+                                            label = { Text("New Category Name") },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+
+                                        IconButton(
+                                            onClick = {
+                                                if (newCategoryName.isNotBlank()) {
+                                                    // 1. Funcție de normalizare (elimină diacritice, spații și face litere mici)
+                                                    fun normalize(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+                                                        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+                                                        .lowercase().trim()
+
+                                                    // 2. Algoritmul Levenshtein pentru calcularea distanței de editare
+                                                    fun levenshtein(s1: String, s2: String): Int {
+                                                        val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
+                                                        for (i in 0..s1.length) dp[i][0] = i
+                                                        for (j in 0..s2.length) dp[0][j] = j
+                                                        for (i in 1..s1.length) {
+                                                            for (j in 1..s2.length) {
+                                                                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
+                                                                dp[i][j] = minOf(
+                                                                    dp[i - 1][j] + 1,        // Ștergere
+                                                                    dp[i][j - 1] + 1,        // Inserare
+                                                                    dp[i - 1][j - 1] + cost  // Substituire
+                                                                )
+                                                            }
+                                                        }
+                                                        return dp[s1.length][s2.length]
+                                                    }
+
+                                                    val normalizedNew = normalize(newCategoryName)
+
+                                                    // 3. Căutăm dacă există deja o categorie similară (Fuzzy Match îmbunătățit)
+                                                    val existingSimilar = availableCategories.find { existing ->
+                                                        val normalizedExisting = normalize(existing)
+                                                        val dist = levenshtein(normalizedNew, normalizedExisting)
+
+                                                        // Verificăm dacă împart un prefix comun lung (primele 4 litere)
+                                                        val commonPrefix = normalizedNew.take(4) == normalizedExisting.take(4) &&
+                                                                normalizedNew.length >= 4
+
+                                                        // Condiții de blocare:
+                                                        normalizedNew == normalizedExisting || // Identice
+                                                                normalizedNew.contains(normalizedExisting) || // Unul e inclus în altul
+                                                                normalizedExisting.contains(normalizedNew) ||
+                                                                (dist <= 3 && commonPrefix) // Diferență de max 3 litere DAR prefix identic
+                                                    }
+
+                                                    if (existingSimilar != null) {
+                                                        // 4. Dacă am găsit ceva similar, oprim dublura și informăm userul
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "⚠️ Categoria '$existingSimilar' pare să existe deja!",
+                                                            android.widget.Toast.LENGTH_LONG
+                                                        ).show()
+
+                                                        // Selectăm automat categoria existentă pentru a menține datele curate
+                                                        selectedCategoryName = existingSimilar
+                                                        showNewCategoryField = false
+                                                        newCategoryName = ""
+                                                    } else {
+                                                        // 5. Dacă e cu adevărat o categorie nouă, o salvăm
+                                                        viewModel.addCustomCategory(newCategoryName)
+                                                        selectedCategoryName = newCategoryName
+                                                        showNewCategoryField = false
+                                                        newCategoryName = ""
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.Check, "Add", tint = PrimaryGreen)
+                                        }
+
+                                        IconButton(onClick = { showNewCategoryField = false }) {
+                                            Icon(Icons.Default.Close, "Cancel", tint = Color.Gray)
                                         }
                                     }
                                 }

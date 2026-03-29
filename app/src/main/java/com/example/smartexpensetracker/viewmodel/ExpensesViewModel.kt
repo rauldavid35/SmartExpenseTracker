@@ -1,13 +1,17 @@
 package com.example.smartexpensetracker.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.smartexpensetracker.repository.CategoryRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 data class ExpenseTransaction(
     val id: String = "",
@@ -23,6 +27,7 @@ data class ExpenseTransaction(
 class ExpensesViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val categoryRepo = CategoryRepository()
 
     private val _expenses = MutableStateFlow<List<ExpenseTransaction>>(emptyList())
     val expenses: StateFlow<List<ExpenseTransaction>> = _expenses.asStateFlow()
@@ -35,31 +40,29 @@ class ExpensesViewModel : ViewModel() {
 
     init {
         fetchExpenses()
-        fetchCategories()
+
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            viewModelScope.launch {
+                categoryRepo.seedDefaultCategories(userId)
+                categoryRepo.getCategories(userId).collect { list ->
+                    _categories.value = list
+                }
+            }
+        }
     }
 
     private fun fetchExpenses() {
         val userId = auth.currentUser?.uid ?: return
+        _isLoading.value = true
         db.collection("users").document(userId).collection("expenses")
             .addSnapshotListener { snapshot, _ ->
+                _isLoading.value = false
                 if (snapshot != null) {
                     val list = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(ExpenseTransaction::class.java)?.copy(id = doc.id)
                     }
                     _expenses.value = list
-                }
-            }
-    }
-
-    private fun fetchCategories() {
-        val userId = auth.currentUser?.uid ?: return
-        val currentMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
-        db.collection("users").document(userId).collection("budgets").document(currentMonth)
-            .collection("categorySettings")
-            .addSnapshotListener { snapshot, _ ->
-                if (snapshot != null) {
-                    val list = snapshot.documents.map { it.id }
-                    _categories.value = list
                 }
             }
     }
@@ -100,32 +103,41 @@ class ExpensesViewModel : ViewModel() {
         db.collection("users").document(userId).collection("expenses").document(id).delete()
     }
 
+    fun addCustomCategory(name: String) {
+        val userId = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            categoryRepo.addCategory(userId, name)
+        }
+    }
+
     // --- LOGICA DE DETECTARE ANOMALII ---
     data class AnomalyResult(val isAnomaly: Boolean, val average: Double)
 
     fun checkAnomaly(amountToCheck: Double, category: String): AnomalyResult {
-        // Luăm doar cheltuielile (negative) din categoria respectivă
         val categoryExpenses = _expenses.value.filter {
             it.category == category && it.amount < 0
         }
 
-        // Dacă avem mai puțin de 3 tranzacții, nu avem destule date pentru o statistică
         if (categoryExpenses.size < 3) return AnomalyResult(false, 0.0)
 
-        val amounts = categoryExpenses.map { Math.abs(it.amount) }
+        val amounts = categoryExpenses.map { abs(it.amount) }
         val mean = amounts.average()
 
-        // Calculăm Deviația Standard (Standard Deviation)
         val variance = amounts.map { Math.pow(it - mean, 2.0) }.average()
         val standardDeviation = Math.sqrt(variance)
 
-        // Un Z-Score de peste 2.5 indică o valoare rară (anomalie)
         val safeSd = if (standardDeviation < 1.0) 1.0 else standardDeviation
         val zScore = Math.abs(amountToCheck - mean) / safeSd
 
-        // Marcăm ca anomalie dacă e statistic rară ȘI de cel puțin 2 ori mai mare decât media
         val isAnomaly = zScore > 2.5 && amountToCheck > (mean * 2)
 
         return AnomalyResult(isAnomaly, mean)
+    }
+
+    private fun normalizeString(input: String): String {
+        val normalized = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+        return normalized.replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+            .lowercase()
+            .trim()
     }
 }
