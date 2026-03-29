@@ -104,6 +104,9 @@ fun ExpensesScreenWithFirebase(
     var selectedExpense by remember { mutableStateOf<ExpenseTransaction?>(null) }
     val isEditing = selectedExpense != null
 
+    var showAnomalyDialog by remember { mutableStateOf(false) }
+    var anomalyAverage by remember { mutableStateOf(0.0) }
+
     // --- HANDLE EXTERNAL TRIGGERS (SHAKE) ---
     LaunchedEffect(externalVoiceTrigger) {
         if (externalVoiceTrigger) {
@@ -352,12 +355,24 @@ fun ExpensesScreenWithFirebase(
                         }
                         Button(
                             onClick = {
-                                // Force category to "Income" if it's not an expense
                                 if (!isExpense) {
                                     selectedCategoryName = "Income"
+                                    showAddDialog = false
+                                    showLocationDialog = true
+                                } else {
+                                    val amountVal = amount.toDoubleOrNull() ?: 0.0
+                                    val anomalyCheck = viewModel.checkAnomaly(amountVal, selectedCategoryName)
+
+                                    if (anomalyCheck.isAnomaly) {
+                                        anomalyAverage = anomalyCheck.average
+                                        // ÎNCHIDEM formularul curent înainte de a-l deschide pe cel de anomalie
+                                        showAddDialog = false
+                                        showAnomalyDialog = true
+                                    } else {
+                                        showAddDialog = false
+                                        showLocationDialog = true
+                                    }
                                 }
-                                showAddDialog = false
-                                showLocationDialog = true
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
                         ) { Text("Next") }
@@ -482,6 +497,37 @@ fun ExpensesScreenWithFirebase(
                     IconButton(onClick = { showCamera = false }, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) { Text("X", color = Color.White, style = MaterialTheme.typography.titleLarge) }
                 }
             }
+        }
+
+        // --- Fereastra de Avertizare pentru Anomalii ---
+        if (showAnomalyDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAnomalyDialog = false
+                    showAddDialog = true // Revenim la formular dacă dăm click pe lângă
+                },
+                title = { Text("Sumă neobișnuită 🚨", color = ExpenseRed) },
+                text = {
+                    Text("Suma introdusă ($amount RON) este mult mai mare decât media ta obișnuită pentru '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nEști sigur că e corect?")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showAnomalyDialog = false
+                            showLocationDialog = true // Utilizatorul confirmă, mergem la locație
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
+                    ) { Text("Da, e corect") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showAnomalyDialog = false
+                        showAddDialog = true // Redeschidem formularul ca să poată modifica suma
+                    }) {
+                        Text("Vreau să modific")
+                    }
+                }
+            )
         }
     }
 }

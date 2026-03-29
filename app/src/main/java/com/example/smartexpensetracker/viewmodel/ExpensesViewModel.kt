@@ -99,4 +99,33 @@ class ExpensesViewModel : ViewModel() {
         val userId = auth.currentUser?.uid ?: return
         db.collection("users").document(userId).collection("expenses").document(id).delete()
     }
+
+    // --- LOGICA DE DETECTARE ANOMALII ---
+    data class AnomalyResult(val isAnomaly: Boolean, val average: Double)
+
+    fun checkAnomaly(amountToCheck: Double, category: String): AnomalyResult {
+        // Luăm doar cheltuielile (negative) din categoria respectivă
+        val categoryExpenses = _expenses.value.filter {
+            it.category == category && it.amount < 0
+        }
+
+        // Dacă avem mai puțin de 3 tranzacții, nu avem destule date pentru o statistică
+        if (categoryExpenses.size < 3) return AnomalyResult(false, 0.0)
+
+        val amounts = categoryExpenses.map { Math.abs(it.amount) }
+        val mean = amounts.average()
+
+        // Calculăm Deviația Standard (Standard Deviation)
+        val variance = amounts.map { Math.pow(it - mean, 2.0) }.average()
+        val standardDeviation = Math.sqrt(variance)
+
+        // Un Z-Score de peste 2.5 indică o valoare rară (anomalie)
+        val safeSd = if (standardDeviation < 1.0) 1.0 else standardDeviation
+        val zScore = Math.abs(amountToCheck - mean) / safeSd
+
+        // Marcăm ca anomalie dacă e statistic rară ȘI de cel puțin 2 ori mai mare decât media
+        val isAnomaly = zScore > 2.5 && amountToCheck > (mean * 2)
+
+        return AnomalyResult(isAnomaly, mean)
+    }
 }
