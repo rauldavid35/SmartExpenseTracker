@@ -74,7 +74,7 @@ fun ExpensesScreenWithFirebase(
     val isLoading by viewModel.isLoading.collectAsState()
 
     // Helpers
-    val geminiParser = remember { GeminiReceiptParser("AIzaSyCR6NQ5OiDnHEHleKk0XxrVnLtKDiPyvoI") }
+    val geminiParser = remember { GeminiReceiptParser("key") }
     val locationHelper = remember { LocationHelper(context) }
 
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -96,7 +96,7 @@ fun ExpensesScreenWithFirebase(
     // Form Data
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    var selectedCategoryName by remember { mutableStateOf("Misc") }
+    var selectedCategoryName by remember { mutableStateOf("None") }
     var isExpense by remember { mutableStateOf(true) }
     var scannedRawText by remember { mutableStateOf("") }
     var detectedAddress by remember { mutableStateOf("") }
@@ -201,7 +201,7 @@ fun ExpensesScreenWithFirebase(
                             selectedExpense = null
                             name = ""
                             amount = ""
-                            selectedCategoryName = if (availableCategories.isNotEmpty()) availableCategories[0] else "Misc"
+                            selectedCategoryName = if (availableCategories.isNotEmpty()) availableCategories[0] else "None"
                             isExpense = true
                             detectedAddress = ""
                             showAddDialog = true
