@@ -3,12 +3,18 @@ package com.example.smartexpensetracker.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.smartexpensetracker.repository.CategoryRepository
+import com.example.smartexpensetracker.repository.LocationRepository
+import com.example.smartexpensetracker.repository.PhotonResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.time.debounce
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
@@ -38,6 +44,19 @@ class ExpensesViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val locationRepo = LocationRepository()
+
+    // State-uri pentru UI
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    private val _searchResults = MutableStateFlow<List<PhotonResult>>(emptyList())
+    val searchResults = _searchResults.asStateFlow()
+
+    private var lastLat = 0.0
+    private var lastLon = 0.0
+
+
     init {
         fetchExpenses()
 
@@ -49,6 +68,19 @@ class ExpensesViewModel : ViewModel() {
                     _categories.value = list
                 }
             }
+        }
+
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        viewModelScope.launch {
+            _searchQuery
+                .debounce(1000L) // Așteaptă 1 secundă după ce userul s-a oprit din scris
+                .filter { it.length >= 3 }
+                .distinctUntilChanged()
+                .collect { query ->
+                    // Căutăm locația (folosim 0.0 momentan pentru ancora GPS)
+                    val results = locationRepo.searchLocations(query, lastLat, lastLon)
+                    _searchResults.value = results
+                }
         }
     }
 
@@ -139,5 +171,18 @@ class ExpensesViewModel : ViewModel() {
         return normalized.replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
             .lowercase()
             .trim()
+    }
+
+    fun onSearchQueryChanged(newQuery: String) {
+        _searchQuery.value = newQuery
+    }
+
+    fun clearLocationSearch() {
+        _searchResults.value = emptyList()
+    }
+
+    fun updateLastLocation(lat: Double, lon: Double) {
+        lastLat = lat
+        lastLon = lon
     }
 }

@@ -76,7 +76,7 @@ fun ExpensesScreenWithFirebase(
     val isLoading by viewModel.isLoading.collectAsState()
 
     // Helpers
-    val geminiParser = remember { GeminiReceiptParser("AIzaSyCTgFegC05nYue48PETjZpuOnBraG0f8lU") }
+    val geminiParser = remember { GeminiReceiptParser("key") }
     val locationHelper = remember { LocationHelper(context) }
 
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -94,6 +94,16 @@ fun ExpensesScreenWithFirebase(
     var showVoiceInput by remember { mutableStateOf(false) }
 
     var isReceiptMode by remember { mutableStateOf(true) }
+
+    // --- STĂRI PENTRU LOCAȚIE ---
+    val searchResults by viewModel.searchResults.collectAsState()
+    val currentSearchQuery by viewModel.searchQuery.collectAsState()
+    var useCurrentLocation by remember { mutableStateOf(true) }
+
+    // Variabilele finale care vor fi trimise la viewModel.addExpense
+    var lat by remember { mutableStateOf(0.0) }
+    var lng by remember { mutableStateOf(0.0) }
+    var locationName by remember { mutableStateOf("") }
 
     // Form Data
     var name by remember { mutableStateOf("") }
@@ -467,23 +477,20 @@ fun ExpensesScreenWithFirebase(
                         }
                         Button(
                             onClick = {
-                                if (!isExpense) {
-                                    selectedCategoryName = "Income"
+                                scope.launch {
+                                    // Luăm locația reală prin helper-ul tău existent
+                                    val coords = locationHelper.getCurrentLocation()
+                                    if (coords != null) {
+                                        // Trimitem coordonatele la ViewModel pentru a "ancora" căutarea Photon
+                                        viewModel.updateLastLocation(coords.first, coords.second)
+
+                                        // Actualizăm și variabilele locale lat/lng pentru varianta "Use GPS"
+                                        lat = coords.first
+                                        lng = coords.second
+                                    }
+
                                     showAddDialog = false
                                     showLocationDialog = true
-                                } else {
-                                    val amountVal = amount.toDoubleOrNull() ?: 0.0
-                                    val anomalyCheck = viewModel.checkAnomaly(amountVal, selectedCategoryName)
-
-                                    if (anomalyCheck.isAnomaly) {
-                                        anomalyAverage = anomalyCheck.average
-                                        // ÎNCHIDEM formularul curent înainte de a-l deschide pe cel de anomalie
-                                        showAddDialog = false
-                                        showAnomalyDialog = true
-                                    } else {
-                                        showAddDialog = false
-                                        showLocationDialog = true
-                                    }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
@@ -494,47 +501,110 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Location Dialog
+        // --- DIALOGUL PENTRU LOCAȚIE (PHOTON) ---
         if (showLocationDialog) {
             AlertDialog(
-                onDismissRequest = { },
-                title = { Text("Add Location?") },
-                text = { Text("Where did this transaction happen?") },
-                confirmButton = {
-                    Button(onClick = {
-                        if (locationPermission.status.isGranted) {
-                            scope.launch {
-                                val coords = locationHelper.getCurrentLocation()
-                                val lat = coords?.first ?: 0.0
-                                val lng = coords?.second ?: 0.0
-                                val realAddressName = if (lat != 0.0) locationHelper.getAddressFromCoordinates(lat, lng) else "My GPS Location"
+                onDismissRequest = { showLocationDialog = false },
+                title = { Text("Set Location") },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Where did you spend the money?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
 
-                                saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, realAddressName, lat, lng)
-                                showLocationDialog = false
-                                selectedExpense = null
+                        // 1. Selector: GPS vs Căutare manuală
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = useCurrentLocation,
+                                onCheckedChange = { useCurrentLocation = it }
+                            )
+                            Text("Use current GPS location")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // 2. Câmpul de căutare Photon (apare dacă nu folosim GPS-ul curent)
+                        if (!useCurrentLocation) {
+                            OutlinedTextField(
+                                value = currentSearchQuery,
+                                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                                label = { Text("Search shop (ex: Lidl, Mall...)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+
+                            // 3. Afișarea rezultatelor de la Photon
+                            if (searchResults.isNotEmpty()) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 200.dp)
+                                        .padding(top = 4.dp),
+                                    elevation = CardDefaults.cardElevation(4.dp)
+                                ) {
+                                    LazyColumn {
+                                        items(searchResults) { spot ->
+                                            ListItem(
+                                                headlineContent = { Text(spot.name) },
+                                                supportingContent = {
+                                                    Text("${spot.city ?: ""} ${spot.street ?: ""}")
+                                                },
+                                                modifier = Modifier.clickable {
+                                                    // Transferăm datele din Photon în variabilele de salvare
+                                                    lat = spot.latitude
+                                                    lng = spot.longitude
+                                                    locationName = spot.name
+                                                    viewModel.onSearchQueryChanged(spot.name)
+                                                    viewModel.clearLocationSearch()
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         } else {
-                            locationPermission.launchPermissionRequest()
+                            Text(
+                                "📍 Location will be set to your current coordinates.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
                         }
-                    }) { Text("Use GPS") }
+                    }
                 },
-                dismissButton = {
-                    Row {
-                        if (detectedAddress.isNotBlank()) {
-                            TextButton(onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    val coords = locationHelper.getCoordinatesFromAddress(detectedAddress)
-                                    saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, detectedAddress, coords?.first ?: 0.0, coords?.second ?: 0.0)
-                                    showLocationDialog = false
-                                    selectedExpense = null
-                                }
-                            }) { Text("Use Receipt Addr") }
-                        }
-                        TextButton(onClick = {
-                            saveTransaction(viewModel, selectedExpense, name, amount, selectedCategoryName, isExpense, "", 0.0, 0.0)
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            // Folosim helper-ul de la finalul fișierului pentru a salva corect (Add sau Edit)
+                            saveTransaction(
+                                viewModel = viewModel,
+                                selectedExpense = selectedExpense,
+                                name = name,
+                                amountStr = amount,
+                                category = selectedCategoryName,
+                                isExpense = isExpense,
+                                locationName = if (useCurrentLocation) "Current Location" else locationName,
+                                lat = lat,
+                                lng = lng
+                            )
+
+                            // Resetăm și închidem
                             showLocationDialog = false
                             selectedExpense = null
-                        }) { Text("Skip") }
+                            name = ""
+                            amount = ""
+                            selectedCategoryName = "General"
+                            viewModel.clearLocationSearch()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
+                    ) {
+                        Text("Finish & Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLocationDialog = false }) {
+                        Text("Back")
                     }
                 }
             )
