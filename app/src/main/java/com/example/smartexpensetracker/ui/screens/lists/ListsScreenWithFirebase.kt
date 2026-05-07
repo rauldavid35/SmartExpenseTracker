@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.lists
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,12 +21,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.ui.theme.ExpenseRed
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.viewmodel.ListsViewModel
-import com.example.smartexpensetracker.viewmodel.ShoppingListData
+import com.example.smartexpensetracker.model.ShoppingListData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

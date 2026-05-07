@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.lists
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

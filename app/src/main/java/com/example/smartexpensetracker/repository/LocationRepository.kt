@@ -1,10 +1,12 @@
 package com.example.smartexpensetracker.repository
 
+import com.example.smartexpensetracker.model.PhotonResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+
 
 class LocationRepository {
     suspend fun searchLocations(query: String, userLat: Double, userLon: Double): List<PhotonResult> = withContext(Dispatchers.IO) {

@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.components
 
 import android.Manifest
 import android.content.Intent

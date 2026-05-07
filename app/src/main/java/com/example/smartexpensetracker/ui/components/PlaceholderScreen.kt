@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,7 +44,7 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
 @Composable
 fun PlaceholderScreen(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onMenuClick: () -> Unit
 ) {
     Column(

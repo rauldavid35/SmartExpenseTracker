@@ -1,8 +1,10 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.expenses
 
 import android.Manifest
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageCapture
@@ -40,7 +42,7 @@ import com.example.smartexpensetracker.ui.components.takePhoto
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.utils.GeminiReceiptParser
 import com.example.smartexpensetracker.utils.LocationHelper
-import com.example.smartexpensetracker.viewmodel.ExpenseTransaction
+import com.example.smartexpensetracker.model.ExpenseTransaction
 import com.example.smartexpensetracker.viewmodel.ExpensesViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -48,7 +50,6 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -57,6 +58,9 @@ import java.util.Currency
 import kotlin.math.abs
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import com.example.smartexpensetracker.ui.components.VoiceInputDialog
+import kotlinx.coroutines.CoroutineScope
+import java.text.Normalizer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -389,7 +393,7 @@ fun ExpensesScreenWithFirebase(
                                             onClick = {
                                                 if (newCategoryName.isNotBlank()) {
                                                     // 1. Funcție de normalizare (elimină diacritice, spații și face litere mici)
-                                                    fun normalize(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+                                                    fun normalize(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD)
                                                         .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
                                                         .lowercase().trim()
 
@@ -431,10 +435,10 @@ fun ExpensesScreenWithFirebase(
 
                                                     if (existingSimilar != null) {
                                                         // 4. Dacă am găsit ceva similar, oprim dublura și informăm userul
-                                                        android.widget.Toast.makeText(
+                                                        Toast.makeText(
                                                             context,
                                                             "⚠️ Categoria '$existingSimilar' pare să existe deja!",
-                                                            android.widget.Toast.LENGTH_LONG
+                                                            Toast.LENGTH_LONG
                                                         ).show()
 
                                                         // Selectăm automat categoria existentă pentru a menține datele curate
@@ -738,11 +742,11 @@ fun saveTransaction(
 }
 
 fun processImage(
-    context: android.content.Context,
+    context: Context,
     uri: Uri,
     isReceiptMode: Boolean,
     geminiParser: GeminiReceiptParser,
-    scope: kotlinx.coroutines.CoroutineScope,
+    scope: CoroutineScope,
     onLoading: () -> Unit,
     onComplete: (String?, String?, Double?, String) -> Unit
 ) {

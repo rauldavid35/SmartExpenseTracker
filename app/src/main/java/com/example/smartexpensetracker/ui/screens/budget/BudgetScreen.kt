@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.budget
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,11 +19,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.viewmodel.BudgetViewModel
-import com.example.smartexpensetracker.viewmodel.CategoryBudgetView
+import com.example.smartexpensetracker.model.CategoryBudgetView
+import com.example.smartexpensetracker.model.BudgetUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

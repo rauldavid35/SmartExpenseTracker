@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,7 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.smartexpensetracker.repository.NoteData
+import com.example.smartexpensetracker.ui.components.VoiceInputDialog
+import com.example.smartexpensetracker.model.NoteData
 import com.example.smartexpensetracker.viewmodel.NotesViewModel
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen

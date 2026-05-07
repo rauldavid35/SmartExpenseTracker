@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.screens.heatmap
 
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -33,7 +33,6 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
 import kotlin.math.abs
-import kotlin.math.max
 
 data class LocationStat(
     val name: String,

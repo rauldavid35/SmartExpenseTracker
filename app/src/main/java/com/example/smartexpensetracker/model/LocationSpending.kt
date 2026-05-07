@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.model
 
 data class LocationSpending(
     val name: String,

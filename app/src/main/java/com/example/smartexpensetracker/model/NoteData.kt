@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker.repository
+package com.example.smartexpensetracker.model
 
 data class NoteData(
     val id: String = "",

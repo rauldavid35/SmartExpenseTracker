@@ -1,4 +1,4 @@
-package com.example.smartexpensetracker
+package com.example.smartexpensetracker.ui.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
