@@ -3,7 +3,9 @@ package com.example.smartexpensetracker.ui.screens.expenses
 import android.Manifest
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.location.Geocoder
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,13 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,12 +33,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.smartexpensetracker.model.ExpenseTransaction
+import com.example.smartexpensetracker.model.ProductResult
 import com.example.smartexpensetracker.ui.components.CameraPreview
+import com.example.smartexpensetracker.ui.components.LocationConsentDialog
+import com.example.smartexpensetracker.ui.components.ProductScanDialog
+import com.example.smartexpensetracker.ui.components.VoiceInputDialog
+import com.example.smartexpensetracker.ui.components.VoiceParseMode
 import com.example.smartexpensetracker.ui.components.takePhoto
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.utils.GeminiReceiptParser
 import com.example.smartexpensetracker.utils.LocationHelper
-import com.example.smartexpensetracker.model.ExpenseTransaction
+import com.example.smartexpensetracker.utils.VoiceParser
+import com.example.smartexpensetracker.utils.VoiceParseResult
 import com.example.smartexpensetracker.viewmodel.ExpensesViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -50,85 +53,88 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.IOException
-import java.util.concurrent.Executors
-import java.util.Locale
-import java.util.Currency
-import kotlin.math.abs
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import com.example.smartexpensetracker.ui.components.VoiceInputDialog
-import kotlinx.coroutines.CoroutineScope
 import java.text.Normalizer
+import java.util.Locale
+import java.util.concurrent.Executors
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ExpensesScreenWithFirebase(
     onMenuClick: () -> Unit,
     viewModel: ExpensesViewModel = viewModel(),
-    // Added params to allow external triggers (from Shake in MainActivity)
     externalVoiceTrigger: Boolean = false,
     externalCameraTrigger: Boolean = false,
     onExternalTriggerHandled: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope   = rememberCoroutineScope()
 
-    val expenses by viewModel.expenses.collectAsState()
-    val availableCategories by viewModel.categories.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val expenses             by viewModel.expenses.collectAsState()
+    val availableCategories  by viewModel.categories.collectAsState()
+    val isLoading            by viewModel.isLoading.collectAsState()
 
-    // Helpers
-    val geminiParser = remember { GeminiReceiptParser("key") }
+    val geminiParser  = remember { GeminiReceiptParser("key") }
     val locationHelper = remember { LocationHelper(context) }
+    val voiceParser   = remember { VoiceParser(apiKey = "key") }
 
-    val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
+    val cameraPermission   = rememberPermissionState(Manifest.permission.CAMERA)
     val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
 
-    val imageCapture = remember { ImageCapture.Builder().build() }
+    val imageCapture   = remember { ImageCapture.Builder().build() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    // UI States
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showLocationDialog by remember { mutableStateOf(false) }
-    var showCamera by remember { mutableStateOf(false) }
+    // ── Standard UI state ─────────────────────────────────────────────────────
+    var showAddDialog        by remember { mutableStateOf(false) }
+    var showLocationDialog   by remember { mutableStateOf(false) }
+    var showCamera           by remember { mutableStateOf(false) }
     var showScannedTextDialog by remember { mutableStateOf(false) }
-    var isProcessingAI by remember { mutableStateOf(false) }
-    var showVoiceInput by remember { mutableStateOf(false) }
+    var isProcessingAI       by remember { mutableStateOf(false) }
+    var showVoiceInput       by remember { mutableStateOf(false) }
+    var isReceiptMode        by remember { mutableStateOf(true) }
 
-    var isReceiptMode by remember { mutableStateOf(true) }
+    // ── Voice state ───────────────────────────────────────────────────────────
+    var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
+    var isVoiceParsing   by remember { mutableStateOf(false) }
 
-    // --- STĂRI PENTRU LOCAȚIE ---
-    val searchResults by viewModel.searchResults.collectAsState()
+    // ── Location / Photon state ───────────────────────────────────────────────
+    val searchResults      by viewModel.searchResults.collectAsState()
     val currentSearchQuery by viewModel.searchQuery.collectAsState()
     var useCurrentLocation by remember { mutableStateOf(true) }
-
-    // Variabilele finale care vor fi trimise la viewModel.addExpense
-    var lat by remember { mutableStateOf(0.0) }
-    var lng by remember { mutableStateOf(0.0) }
+    var lat          by remember { mutableStateOf(0.0) }
+    var lng          by remember { mutableStateOf(0.0) }
     var locationName by remember { mutableStateOf("") }
 
-    // Form Data
-    var name by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
+    // ── Form data ─────────────────────────────────────────────────────────────
+    var name                 by remember { mutableStateOf("") }
+    var amount               by remember { mutableStateOf("") }
     var selectedCategoryName by remember { mutableStateOf("None") }
-    var isExpense by remember { mutableStateOf(true) }
-    var scannedRawText by remember { mutableStateOf("") }
-    var detectedAddress by remember { mutableStateOf("") }
-
-    var selectedExpense by remember { mutableStateOf<ExpenseTransaction?>(null) }
+    var isExpense            by remember { mutableStateOf(true) }
+    var scannedRawText       by remember { mutableStateOf("") }
+    var detectedAddress      by remember { mutableStateOf("") }
+    var selectedExpense      by remember { mutableStateOf<ExpenseTransaction?>(null) }
     val isEditing = selectedExpense != null
-
     var showAnomalyDialog by remember { mutableStateOf(false) }
-    var anomalyAverage by remember { mutableStateOf(0.0) }
+    var anomalyAverage    by remember { mutableStateOf(0.0) }
 
-    // --- HANDLE EXTERNAL TRIGGERS (SHAKE) ---
+    // ── Product scan state ────────────────────────────────────────────────────
+    var productScanResult     by remember { mutableStateOf<ProductResult?>(null) }
+    var showProductScanDialog by remember { mutableStateOf(false) }
+
+    // Location consent for product scan:
+    //   null  = not yet asked → show the consent dialog
+    //   true  = user allowed → resolve GPS → local stores
+    //   false = user declined → international stores (Amazon, eBay)
+    var locationConsentGranted    by remember { mutableStateOf<Boolean?>(null) }
+    var showLocationConsentDialog by remember { mutableStateOf(false) }
+    var pendingProductUri         by remember { mutableStateOf<Uri?>(null) }
+
+    // ── External triggers (shake / volume keys) ───────────────────────────────
     LaunchedEffect(externalVoiceTrigger) {
-        if (externalVoiceTrigger) {
-            showVoiceInput = true
-            onExternalTriggerHandled()
-        }
+        if (externalVoiceTrigger) { showVoiceInput = true; onExternalTriggerHandled() }
     }
     LaunchedEffect(externalCameraTrigger) {
         if (externalCameraTrigger) {
@@ -138,46 +144,52 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
-    // --- LOGIC: Voice Parsing ---
-    fun processVoiceCommand(text: String) {
-        // Logic: "Name" then "Amount"
-        // Heuristic: Extract the first number found as amount
-        val numberRegex = Regex("[0-9]+(\\.[0-9]+)?")
-        val match = numberRegex.find(text)
-
-        if (match != null) {
-            amount = match.value
-            // Remove the amount from the text to get the name
-            name = text.replace(match.value, "").trim()
-        } else {
-            name = text
-            amount = ""
+    // ── Voice parsing ─────────────────────────────────────────────────────────
+    fun processVoiceCommand(transcript: String) {
+        if (transcript.isBlank()) { voiceParseResult = null; isVoiceParsing = false; return }
+        isVoiceParsing = true; voiceParseResult = null
+        scope.launch {
+            val result = voiceParser.parseExpense(transcript, availableCategories)
+            voiceParseResult = result; isVoiceParsing = false
         }
-
-        isExpense = true
-        showAddDialog = true
     }
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
+    // ── Product scan launcher ─────────────────────────────────────────────────
+    // Resolves GPS → countryIso via Geocoder, then calls the updated processImage.
+    // Called after the user answers the consent dialog AND from the camera shutter.
+    fun launchProductScan(uri: Uri) {
+        isProcessingAI = true
+        scope.launch {
+            val resolvedCountryIso: String? = if (locationConsentGranted == true) {
+                try {
+                    val coords = locationHelper.getCurrentLocation()
+                    if (coords != null) {
+                        @Suppress("DEPRECATION")
+                        val addresses = Geocoder(context, Locale.ENGLISH)
+                            .getFromLocation(coords.first, coords.second, 1)
+                        addresses?.firstOrNull()?.countryCode   // e.g. "RO"
+                    } else null
+                } catch (e: Exception) { null }
+            } else {
+                null  // declined → international
+            }
+
             processImage(
-                context = context,
-                uri = it,
-                isReceiptMode = isReceiptMode,
-                geminiParser = geminiParser,
-                scope = scope,
-                onLoading = { isProcessingAI = true },
-                onComplete = { merchant, address, total, raw ->
+                context           = context,
+                uri               = uri,
+                isReceiptMode     = false,
+                geminiParser      = geminiParser,
+                scope             = scope,
+                countryIso        = resolvedCountryIso,
+                onLoading         = { /* already set above */ },
+                onReceiptComplete = { _, _, _, _ -> },  // not used in product mode
+                onProductComplete = { result ->
                     isProcessingAI = false
-                    if (merchant != null) {
-                        name = merchant
-                        detectedAddress = address ?: ""
-                        amount = total?.toString() ?: ""
-                        showAddDialog = true
+                    if (result != null) {
+                        productScanResult     = result
+                        showProductScanDialog = true
                     } else {
-                        scannedRawText = raw
+                        scannedRawText        = "Could not identify product"
                         showScannedTextDialog = true
                     }
                 }
@@ -185,72 +197,125 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
+    // ── Gallery launcher ──────────────────────────────────────────────────────
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+
+        if (!isReceiptMode) {
+            // Product scan → ask for location consent once, then scan
+            pendingProductUri = uri
+            if (locationConsentGranted == null) {
+                showLocationConsentDialog = true
+            } else {
+                launchProductScan(uri)
+            }
+        } else {
+            // Receipt scan → straight through, no consent needed
+            processImage(
+                context           = context,
+                uri               = uri,
+                isReceiptMode     = true,
+                geminiParser      = geminiParser,
+                scope             = scope,
+                countryIso        = null,
+                onLoading         = { isProcessingAI = true },
+                onReceiptComplete = { merchant, address, total, raw ->
+                    isProcessingAI = false
+                    if (merchant != null) {
+                        name = merchant; detectedAddress = address ?: ""
+                        amount = total?.toString() ?: ""; showAddDialog = true
+                    } else { scannedRawText = raw; showScannedTextDialog = true }
+                },
+                onProductComplete = {}
+            )
+        }
+    }
+
     val totalExpenses = expenses.filter { it.amount < 0 }.sumOf { -it.amount }
-    val totalIncome = expenses.filter { it.amount > 0 }.sumOf { it.amount }
+    val totalIncome   = expenses.filter { it.amount > 0 }.sumOf { it.amount }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UI
+    // ─────────────────────────────────────────────────────────────────────────
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+
             // Top Bar
-            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryGreen)) {
-                    Icon(Icons.Default.Wallet, "Menu", tint = Color.White)
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick  = onMenuClick,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryGreen)
+                ) { Icon(Icons.Default.Wallet, "Menu", tint = Color.White) }
+
                 Text("Expenses", style = MaterialTheme.typography.headlineSmall)
+
                 Row {
-                    // Voice Button
                     IconButton(
-                        onClick = { showVoiceInput = true },
+                        onClick  = { voiceParseResult = null; isVoiceParsing = false; showVoiceInput = true },
                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint)
-                    ) {
-                        Icon(Icons.Default.Mic, "Voice", tint = PrimaryGreen)
-                    }
+                    ) { Icon(Icons.Default.Mic, "Voice", tint = PrimaryGreen) }
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     IconButton(
                         onClick = {
                             if (cameraPermission.status.isGranted) showCamera = true
                             else cameraPermission.launchPermissionRequest()
                         },
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color.LightGray.copy(alpha = 0.3f))
-                    ) {
-                        Icon(Icons.Default.CameraAlt, "Scan", tint = PrimaryGreen)
-                    }
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                            .background(Color.LightGray.copy(alpha = 0.3f))
+                    ) { Icon(Icons.Default.CameraAlt, "Scan", tint = PrimaryGreen) }
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     FloatingActionButton(
                         onClick = {
-                            selectedExpense = null
-                            name = ""
-                            amount = ""
-                            selectedCategoryName = if (availableCategories.isNotEmpty()) availableCategories[0] else "None"
-                            isExpense = true
-                            detectedAddress = ""
-                            showAddDialog = true
+                            selectedExpense = null; name = ""; amount = ""
+                            selectedCategoryName = availableCategories.firstOrNull() ?: "None"
+                            isExpense = true; detectedAddress = ""; showAddDialog = true
                         },
                         containerColor = PrimaryGreen,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(Icons.Default.Add, "Add", tint = Color.White)
-                    }
+                        modifier       = Modifier.size(48.dp)
+                    ) { Icon(Icons.Default.Add, "Add", tint = Color.White) }
                 }
             }
 
-            // Summary
+            // Summary cards
             Row(modifier = Modifier.padding(16.dp)) {
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp)) { Text("Expenses", color = TextSecondary); Text("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge) }
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Expenses", color = TextSecondary)
+                        Text("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge)
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp)) { Text("Income", color = TextSecondary); Text("$${String.format("%.2f", totalIncome)}", color = IncomeGreen, style = MaterialTheme.typography.titleLarge) }
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Income", color = TextSecondary)
+                        Text("$${String.format("%.2f", totalIncome)}", color = IncomeGreen, style = MaterialTheme.typography.titleLarge)
+                    }
                 }
             }
 
-            if (isLoading) Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            if (isLoading) Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
 
-            // List
-            LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Expense list
+            LazyColumn(
+                contentPadding    = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 items(expenses) { transaction ->
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors   = CardDefaults.cardColors(containerColor = Color.White),
                         modifier = Modifier.clickable {
                             selectedExpense = transaction
                             name = transaction.name
@@ -261,30 +326,93 @@ fun ExpensesScreenWithFirebase(
                             showAddDialog = true
                         }
                     ) {
-                        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier          = Modifier.padding(16.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(transaction.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${transaction.category}${if (transaction.locationName.isNotEmpty()) " • ${transaction.locationName}" else ""}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                Text(
+                                    "${transaction.category}${if (transaction.locationName.isNotEmpty()) " • ${transaction.locationName}" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
                             }
-                            Text(text = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}", color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text  = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}",
+                                color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Voice Dialog
+        // ── DIALOGS ───────────────────────────────────────────────────────────
+
+        // Voice input
         if (showVoiceInput) {
             VoiceInputDialog(
-                onTextReceived = { text ->
-                    processVoiceCommand(text)
-                    showVoiceInput = false
+                mode          = VoiceParseMode.EXPENSE,
+                parseResult   = voiceParseResult,
+                isParsing     = isVoiceParsing,
+                onTextReceived = { text -> processVoiceCommand(text) },
+                onResultConfirmed = { result ->
+                    if (result is VoiceParseResult.ExpenseResult) {
+                        name                 = result.name
+                        amount               = result.amount?.toString() ?: ""
+                        selectedCategoryName = result.category ?: availableCategories.firstOrNull() ?: "None"
+                        detectedAddress      = result.location ?: ""
+                        isExpense            = true
+                        showVoiceInput = false; voiceParseResult = null; isVoiceParsing = false
+                        showAddDialog  = true
+                    }
                 },
-                onDismiss = { showVoiceInput = false }
+                onDismiss = { showVoiceInput = false; voiceParseResult = null; isVoiceParsing = false }
             )
         }
 
-        // Add/Edit Dialog
+        // Location consent — shown once before the first product scan
+        if (showLocationConsentDialog) {
+            LocationConsentDialog(
+                onAllow = {
+                    locationConsentGranted    = true
+                    showLocationConsentDialog = false
+                    pendingProductUri?.let { launchProductScan(it) }
+                },
+                onDecline = {
+                    locationConsentGranted    = false
+                    showLocationConsentDialog = false
+                    pendingProductUri?.let { launchProductScan(it) }
+                },
+                onDismiss = {
+                    // Treat dismiss as decline so the scan still proceeds
+                    locationConsentGranted    = false
+                    showLocationConsentDialog = false
+                    pendingProductUri?.let { launchProductScan(it) }
+                }
+            )
+        }
+
+        // Product scan result
+        if (showProductScanDialog && productScanResult != null) {
+            ProductScanDialog(
+                result = productScanResult!!,
+                onAddAsExpense = { productName, price ->
+                    name                 = productName
+                    amount               = price.toString()
+                    isExpense            = true
+                    selectedCategoryName = availableCategories.firstOrNull() ?: "Shopping"
+                    showProductScanDialog = false
+                    productScanResult     = null
+                    showAddDialog         = true
+                },
+                onDismiss = { showProductScanDialog = false; productScanResult = null }
+            )
+        }
+
+        // Add / Edit expense form
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; selectedExpense = null },
@@ -292,21 +420,17 @@ fun ExpensesScreenWithFirebase(
                 text = {
                     Column {
                         OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
+                            value = name, onValueChange = { name = it },
                             label = { Text("Name / Details") },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 4
+                            modifier = Modifier.fillMaxWidth(), maxLines = 4
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
-                            value = amount,
-                            onValueChange = { amount = it },
+                            value = amount, onValueChange = { amount = it },
                             label = { Text("Amount") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = isExpense, onCheckedChange = { isExpense = it })
@@ -314,153 +438,80 @@ fun ExpensesScreenWithFirebase(
                         }
 
                         if (isExpense) {
+                            Spacer(modifier = Modifier.height(8.dp))
                             var expanded by remember { mutableStateOf(false) }
                             var showNewCategoryField by remember { mutableStateOf(false) }
                             var newCategoryName by remember { mutableStateOf("") }
 
-                            if (isExpense) {
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // State-uri locale necesare pentru acest switch (asigură-te că sunt în interiorul dialogului sau la nivel de screen)
-                                var expanded by remember { mutableStateOf(false) }
-                                var showNewCategoryField by remember { mutableStateOf(false) }
-                                var newCategoryName by remember { mutableStateOf("") }
-
-                                if (!showNewCategoryField) {
-                                    ExposedDropdownMenuBox(
-                                        expanded = expanded,
-                                        onExpandedChange = { expanded = !expanded }
-                                    ) {
-                                        OutlinedTextField(
-                                            value = selectedCategoryName,
-                                            onValueChange = {},
-                                            readOnly = true,
-                                            label = { Text("Select Category") },
-                                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                            // menuAnchor() este esențial pentru poziționarea corectă a meniului
-                                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                                        )
-                                        ExposedDropdownMenu(
-                                            expanded = expanded,
-                                            onDismissRequest = { expanded = false }
-                                        ) {
-                                            // Listăm categoriile venite din Repository
-                                            availableCategories.forEach { category ->
-                                                DropdownMenuItem(
-                                                    text = { Text(category) },
-                                                    onClick = {
-                                                        selectedCategoryName = category
-                                                        expanded = false
-                                                    }
-                                                )
-                                            }
-
-                                            // Linie fină de separare
-                                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                                            // Butonul de adăugare categorie nouă
+                            if (!showNewCategoryField) {
+                                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                                    OutlinedTextField(
+                                        value = selectedCategoryName, onValueChange = {},
+                                        readOnly = true, label = { Text("Select Category") },
+                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                                    )
+                                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                        availableCategories.forEach { category ->
                                             DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        "+ Add New Category",
-                                                        color = PrimaryGreen,
-                                                        style = MaterialTheme.typography.labelLarge
-                                                    )
-                                                },
-                                                onClick = {
-                                                    showNewCategoryField = true
-                                                    expanded = false
-                                                }
+                                                text    = { Text(category) },
+                                                onClick = { selectedCategoryName = category; expanded = false }
                                             )
                                         }
-                                    }
-                                } else {
-                                    // Câmp pentru adăugare categorie nouă "on the fly"
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                                    ) {
-                                        OutlinedTextField(
-                                            value = newCategoryName,
-                                            onValueChange = { newCategoryName = it },
-                                            label = { Text("New Category Name") },
-                                            modifier = Modifier.weight(1f),
-                                            singleLine = true
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                        DropdownMenuItem(
+                                            text    = { Text("+ Add New Category", color = PrimaryGreen, style = MaterialTheme.typography.labelLarge) },
+                                            onClick = { showNewCategoryField = true; expanded = false }
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-
-                                        IconButton(
-                                            onClick = {
-                                                if (newCategoryName.isNotBlank()) {
-                                                    // 1. Funcție de normalizare (elimină diacritice, spații și face litere mici)
-                                                    fun normalize(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD)
-                                                        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-                                                        .lowercase().trim()
-
-                                                    // 2. Algoritmul Levenshtein pentru calcularea distanței de editare
-                                                    fun levenshtein(s1: String, s2: String): Int {
-                                                        val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
-                                                        for (i in 0..s1.length) dp[i][0] = i
-                                                        for (j in 0..s2.length) dp[0][j] = j
-                                                        for (i in 1..s1.length) {
-                                                            for (j in 1..s2.length) {
-                                                                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
-                                                                dp[i][j] = minOf(
-                                                                    dp[i - 1][j] + 1,        // Ștergere
-                                                                    dp[i][j - 1] + 1,        // Inserare
-                                                                    dp[i - 1][j - 1] + cost  // Substituire
-                                                                )
-                                                            }
-                                                        }
-                                                        return dp[s1.length][s2.length]
-                                                    }
-
-                                                    val normalizedNew = normalize(newCategoryName)
-
-                                                    // 3. Căutăm dacă există deja o categorie similară (Fuzzy Match îmbunătățit)
-                                                    val existingSimilar = availableCategories.find { existing ->
-                                                        val normalizedExisting = normalize(existing)
-                                                        val dist = levenshtein(normalizedNew, normalizedExisting)
-
-                                                        // Verificăm dacă împart un prefix comun lung (primele 4 litere)
-                                                        val commonPrefix = normalizedNew.take(4) == normalizedExisting.take(4) &&
-                                                                normalizedNew.length >= 4
-
-                                                        // Condiții de blocare:
-                                                        normalizedNew == normalizedExisting || // Identice
-                                                                normalizedNew.contains(normalizedExisting) || // Unul e inclus în altul
-                                                                normalizedExisting.contains(normalizedNew) ||
-                                                                (dist <= 3 && commonPrefix) // Diferență de max 3 litere DAR prefix identic
-                                                    }
-
-                                                    if (existingSimilar != null) {
-                                                        // 4. Dacă am găsit ceva similar, oprim dublura și informăm userul
-                                                        Toast.makeText(
-                                                            context,
-                                                            "⚠️ Categoria '$existingSimilar' pare să existe deja!",
-                                                            Toast.LENGTH_LONG
-                                                        ).show()
-
-                                                        // Selectăm automat categoria existentă pentru a menține datele curate
-                                                        selectedCategoryName = existingSimilar
-                                                        showNewCategoryField = false
-                                                        newCategoryName = ""
-                                                    } else {
-                                                        // 5. Dacă e cu adevărat o categorie nouă, o salvăm
-                                                        viewModel.addCustomCategory(newCategoryName)
-                                                        selectedCategoryName = newCategoryName
-                                                        showNewCategoryField = false
-                                                        newCategoryName = ""
-                                                    }
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier          = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = newCategoryName, onValueChange = { newCategoryName = it },
+                                        label = { Text("New Category Name") },
+                                        modifier = Modifier.weight(1f), singleLine = true
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(onClick = {
+                                        if (newCategoryName.isNotBlank()) {
+                                            fun normalize(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD)
+                                                .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+                                                .lowercase().trim()
+                                            fun levenshtein(s1: String, s2: String): Int {
+                                                val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
+                                                for (i in 0..s1.length) dp[i][0] = i
+                                                for (j in 0..s2.length) dp[0][j] = j
+                                                for (i in 1..s1.length) for (j in 1..s2.length) {
+                                                    val cost = if (s1[i-1] == s2[j-1]) 0 else 1
+                                                    dp[i][j] = minOf(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
                                                 }
+                                                return dp[s1.length][s2.length]
                                             }
-                                        ) {
-                                            Icon(Icons.Default.Check, "Add", tint = PrimaryGreen)
+                                            val normalizedNew = normalize(newCategoryName)
+                                            val existingSimilar = availableCategories.find { existing ->
+                                                val ne = normalize(existing)
+                                                val dist = levenshtein(normalizedNew, ne)
+                                                val commonPrefix = normalizedNew.take(4) == ne.take(4) && normalizedNew.length >= 4
+                                                normalizedNew == ne || normalizedNew.contains(ne) ||
+                                                        ne.contains(normalizedNew) || (dist <= 3 && commonPrefix)
+                                            }
+                                            if (existingSimilar != null) {
+                                                Toast.makeText(context, "⚠️ Category '$existingSimilar' already exists!", Toast.LENGTH_LONG).show()
+                                                selectedCategoryName = existingSimilar
+                                                showNewCategoryField = false; newCategoryName = ""
+                                            } else {
+                                                viewModel.addCustomCategory(newCategoryName)
+                                                selectedCategoryName = newCategoryName
+                                                showNewCategoryField = false; newCategoryName = ""
+                                            }
                                         }
-
-                                        IconButton(onClick = { showNewCategoryField = false }) {
-                                            Icon(Icons.Default.Close, "Cancel", tint = Color.Gray)
-                                        }
+                                    }) { Icon(Icons.Default.Check, "Add", tint = PrimaryGreen) }
+                                    IconButton(onClick = { showNewCategoryField = false }) {
+                                        Icon(Icons.Default.Close, "Cancel", tint = Color.Gray)
                                     }
                                 }
                             }
@@ -473,8 +524,7 @@ fun ExpensesScreenWithFirebase(
                             TextButton(
                                 onClick = {
                                     selectedExpense?.let { viewModel.deleteExpense(it.id) }
-                                    showAddDialog = false
-                                    selectedExpense = null
+                                    showAddDialog = false; selectedExpense = null
                                 },
                                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) { Text("Delete") }
@@ -482,19 +532,12 @@ fun ExpensesScreenWithFirebase(
                         Button(
                             onClick = {
                                 scope.launch {
-                                    // Luăm locația reală prin helper-ul tău existent
                                     val coords = locationHelper.getCurrentLocation()
                                     if (coords != null) {
-                                        // Trimitem coordonatele la ViewModel pentru a "ancora" căutarea Photon
                                         viewModel.updateLastLocation(coords.first, coords.second)
-
-                                        // Actualizăm și variabilele locale lat/lng pentru varianta "Use GPS"
-                                        lat = coords.first
-                                        lng = coords.second
+                                        lat = coords.first; lng = coords.second
                                     }
-
-                                    showAddDialog = false
-                                    showLocationDialog = true
+                                    showAddDialog = false; showLocationDialog = true
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
@@ -505,60 +548,34 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // --- DIALOGUL PENTRU LOCAȚIE (PHOTON) ---
+        // Location / Photon dialog
         if (showLocationDialog) {
             AlertDialog(
                 onDismissRequest = { showLocationDialog = false },
                 title = { Text("Set Location") },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "Where did you spend the money?",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        // 1. Selector: GPS vs Căutare manuală
+                        Text("Where did you spend the money?", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = useCurrentLocation,
-                                onCheckedChange = { useCurrentLocation = it }
-                            )
+                            Checkbox(checked = useCurrentLocation, onCheckedChange = { useCurrentLocation = it })
                             Text("Use current GPS location")
                         }
-
                         Spacer(modifier = Modifier.height(8.dp))
-
-                        // 2. Câmpul de căutare Photon (apare dacă nu folosim GPS-ul curent)
                         if (!useCurrentLocation) {
                             OutlinedTextField(
-                                value = currentSearchQuery,
-                                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                                value = currentSearchQuery, onValueChange = { viewModel.onSearchQueryChanged(it) },
                                 label = { Text("Search shop (ex: Lidl, Mall...)") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                modifier = Modifier.fillMaxWidth(), singleLine = true
                             )
-
-                            // 3. Afișarea rezultatelor de la Photon
                             if (searchResults.isNotEmpty()) {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 200.dp)
-                                        .padding(top = 4.dp),
-                                    elevation = CardDefaults.cardElevation(4.dp)
-                                ) {
+                                Card(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 4.dp), elevation = CardDefaults.cardElevation(4.dp)) {
                                     LazyColumn {
                                         items(searchResults) { spot ->
                                             ListItem(
-                                                headlineContent = { Text(spot.name) },
-                                                supportingContent = {
-                                                    Text("${spot.city ?: ""} ${spot.street ?: ""}")
-                                                },
+                                                headlineContent   = { Text(spot.name) },
+                                                supportingContent = { Text("${spot.city ?: ""} ${spot.street ?: ""}") },
                                                 modifier = Modifier.clickable {
-                                                    // Transferăm datele din Photon în variabilele de salvare
-                                                    lat = spot.latitude
-                                                    lng = spot.longitude
+                                                    lat = spot.latitude; lng = spot.longitude
                                                     locationName = spot.name
                                                     viewModel.onSearchQueryChanged(spot.name)
                                                     viewModel.clearLocationSearch()
@@ -569,52 +586,35 @@ fun ExpensesScreenWithFirebase(
                                 }
                             }
                         } else {
-                            Text(
-                                "📍 Location will be set to your current coordinates.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.Gray
-                            )
+                            Text("📍 Location will be set to your current coordinates.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            // Folosim helper-ul de la finalul fișierului pentru a salva corect (Add sau Edit)
                             saveTransaction(
-                                viewModel = viewModel,
+                                viewModel       = viewModel,
                                 selectedExpense = selectedExpense,
-                                name = name,
-                                amountStr = amount,
-                                category = selectedCategoryName,
-                                isExpense = isExpense,
-                                locationName = if (useCurrentLocation) "Current Location" else locationName,
-                                lat = lat,
-                                lng = lng
+                                name            = name,
+                                amountStr       = amount,
+                                category        = selectedCategoryName,
+                                isExpense       = isExpense,
+                                locationName    = if (useCurrentLocation) "Current Location" else locationName,
+                                lat             = lat, lng = lng
                             )
-
-                            // Resetăm și închidem
-                            showLocationDialog = false
-                            selectedExpense = null
-                            name = ""
-                            amount = ""
-                            selectedCategoryName = "General"
+                            showLocationDialog = false; selectedExpense = null
+                            name = ""; amount = ""; selectedCategoryName = "General"
                             viewModel.clearLocationSearch()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
-                    ) {
-                        Text("Finish & Save")
-                    }
+                    ) { Text("Finish & Save") }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showLocationDialog = false }) {
-                        Text("Back")
-                    }
-                }
+                dismissButton = { TextButton(onClick = { showLocationDialog = false }) { Text("Back") } }
             )
         }
 
-        // Fallback Dialog
+        // Scanned text fallback
         if (showScannedTextDialog) {
             AlertDialog(
                 onDismissRequest = { showScannedTextDialog = false },
@@ -623,123 +623,167 @@ fun ExpensesScreenWithFirebase(
                     Column {
                         Text("Could not auto-detect info.", style = MaterialTheme.typography.bodySmall)
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = scannedRawText, onValueChange = { scannedRawText = it }, label = { Text("Raw Info") }, modifier = Modifier.fillMaxWidth().height(100.dp))
+                        OutlinedTextField(
+                            value = scannedRawText, onValueChange = { scannedRawText = it },
+                            label = { Text("Raw Info") }, modifier = Modifier.fillMaxWidth().height(100.dp)
+                        )
                     }
                 },
-                confirmButton = { Button(onClick = { name = scannedRawText; showScannedTextDialog = false; showAddDialog = true }) { Text("Use This") } }
+                confirmButton = {
+                    Button(onClick = { name = scannedRawText; showScannedTextDialog = false; showAddDialog = true }) {
+                        Text("Use This")
+                    }
+                }
             )
         }
 
-        // Loading
+        // AI loading spinner
         if (isProcessingAI) {
             Dialog(onDismissRequest = {}) {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(color = PrimaryGreen); Spacer(modifier = Modifier.height(16.dp)); Text("AI is analyzing...") }
+                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = PrimaryGreen)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("AI is analyzing...")
+                    }
                 }
             }
         }
 
-        // Camera Overlay
+        // Camera overlay
         if (showCamera) {
-            Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Dialog(
+                onDismissRequest = { showCamera = false },
+                properties       = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                     CameraPreview(modifier = Modifier.fillMaxSize(), imageCapture = imageCapture)
+
+                    // Receipt / Product toggle
                     Row(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(onClick = { isReceiptMode = true }, colors = ButtonDefaults.buttonColors(containerColor = if (isReceiptMode) PrimaryGreen else Color.Transparent), shape = RoundedCornerShape(24.dp)) {
-                            Icon(Icons.Default.Receipt, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Receipt")
-                        }
-                        Button(onClick = { isReceiptMode = false }, colors = ButtonDefaults.buttonColors(containerColor = if (!isReceiptMode) PrimaryGreen else Color.Transparent), shape = RoundedCornerShape(24.dp)) {
-                            Icon(Icons.Default.ShoppingBag, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Product")
-                        }
+                        Button(
+                            onClick = { isReceiptMode = true },
+                            colors  = ButtonDefaults.buttonColors(containerColor = if (isReceiptMode) PrimaryGreen else Color.Transparent),
+                            shape   = RoundedCornerShape(24.dp)
+                        ) { Icon(Icons.Default.Receipt, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Receipt") }
+
+                        Button(
+                            onClick = { isReceiptMode = false },
+                            colors  = ButtonDefaults.buttonColors(containerColor = if (!isReceiptMode) PrimaryGreen else Color.Transparent),
+                            shape   = RoundedCornerShape(24.dp)
+                        ) { Icon(Icons.Default.ShoppingBag, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Product") }
                     }
+
+                    // Bottom controls
                     Row(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth(),
+                        modifier              = Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { galleryLauncher.launch("image/*") }, modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.2f), CircleShape)) { Icon(Icons.Default.Image, "Gallery", tint = Color.White) }
-                        Box(modifier = Modifier.size(80.dp).border(4.dp, Color.White, CircleShape).clickable {
-                            takePhoto(imageCapture = imageCapture, executor = cameraExecutor, onImageCaptured = { uri ->
-                                showCamera = false
-                                processImage(context, uri, isReceiptMode, geminiParser, scope, { isProcessingAI = true }, { merchant, address, total, raw ->
-                                    isProcessingAI = false
-                                    if (merchant != null) {
-                                        name = merchant
-                                        detectedAddress = address ?: ""
-                                        amount = total?.toString() ?: ""
-                                        showAddDialog = true
-                                    } else {
-                                        scannedRawText = raw
-                                        showScannedTextDialog = true
-                                    }
-                                })
-                            }, onError = {})
-                        }, contentAlignment = Alignment.Center) { Box(modifier = Modifier.size(60.dp).background(Color.White, CircleShape)) }
+                        // Gallery button — same consent logic as direct gallery launch
+                        IconButton(
+                            onClick  = { galleryLauncher.launch("image/*") },
+                            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.2f), CircleShape)
+                        ) { Icon(Icons.Default.Image, "Gallery", tint = Color.White) }
+
+                        // Shutter
+                        Box(
+                            modifier         = Modifier.size(80.dp).border(4.dp, Color.White, CircleShape).clickable {
+                                takePhoto(
+                                    imageCapture    = imageCapture,
+                                    executor        = cameraExecutor,
+                                    onImageCaptured = { uri ->
+                                        showCamera = false
+                                        if (!isReceiptMode) {
+                                            // Product mode — go through consent flow
+                                            pendingProductUri = uri
+                                            if (locationConsentGranted == null) {
+                                                showLocationConsentDialog = true
+                                            } else {
+                                                launchProductScan(uri)
+                                            }
+                                        } else {
+                                            // Receipt mode — straight through
+                                            processImage(
+                                                context           = context,
+                                                uri               = uri,
+                                                isReceiptMode     = true,
+                                                geminiParser      = geminiParser,
+                                                scope             = scope,
+                                                countryIso        = null,
+                                                onLoading         = { isProcessingAI = true },
+                                                onReceiptComplete = { merchant, address, total, raw ->
+                                                    isProcessingAI = false
+                                                    if (merchant != null) {
+                                                        name = merchant; detectedAddress = address ?: ""
+                                                        amount = total?.toString() ?: ""; showAddDialog = true
+                                                    } else { scannedRawText = raw; showScannedTextDialog = true }
+                                                },
+                                                onProductComplete = {}
+                                            )
+                                        }
+                                    },
+                                    onError = {}
+                                )
+                            },
+                            contentAlignment = Alignment.Center
+                        ) { Box(modifier = Modifier.size(60.dp).background(Color.White, CircleShape)) }
+
                         Spacer(modifier = Modifier.size(48.dp))
                     }
-                    IconButton(onClick = { showCamera = false }, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) { Text("X", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+
+                    IconButton(
+                        onClick  = { showCamera = false },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                    ) { Text("X", color = Color.White, style = MaterialTheme.typography.titleLarge) }
                 }
             }
         }
 
-        // --- Fereastra de Avertizare pentru Anomalii ---
+        // Anomaly warning
         if (showAnomalyDialog) {
             AlertDialog(
-                onDismissRequest = {
-                    showAnomalyDialog = false
-                    showAddDialog = true // Revenim la formular dacă dăm click pe lângă
-                },
+                onDismissRequest = { showAnomalyDialog = false; showAddDialog = true },
                 title = { Text("Sumă neobișnuită 🚨", color = ExpenseRed) },
-                text = {
-                    Text("Suma introdusă ($amount RON) este mult mai mare decât media ta obișnuită pentru '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nEști sigur că e corect?")
-                },
+                text  = { Text("Suma introdusă ($amount RON) este mult mai mare decât media ta obișnuită pentru '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nEști sigur că e corect?") },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showAnomalyDialog = false
-                            showLocationDialog = true // Utilizatorul confirmă, mergem la locație
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
-                    ) { Text("Da, e corect") }
+                    Button(onClick = { showAnomalyDialog = false; showLocationDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)) { Text("Da, e corect") }
                 },
                 dismissButton = {
-                    TextButton(onClick = {
-                        showAnomalyDialog = false
-                        showAddDialog = true // Redeschidem formularul ca să poată modifica suma
-                    }) {
-                        Text("Vreau să modific")
-                    }
+                    TextButton(onClick = { showAnomalyDialog = false; showAddDialog = true }) { Text("Vreau să modific") }
                 }
             )
         }
     }
 }
 
-// --- Helper Functions ---
+// ─────────────────────────────────────────────────────────────────────────────
+// saveTransaction — unchanged
+// ─────────────────────────────────────────────────────────────────────────────
 
 fun saveTransaction(
-    viewModel: ExpensesViewModel,
-    selectedExpense: ExpenseTransaction?,
-    name: String,
-    amountStr: String,
-    category: String,
-    isExpense: Boolean,
-    locationName: String,
-    lat: Double,
-    lng: Double
+    viewModel: ExpensesViewModel, selectedExpense: ExpenseTransaction?,
+    name: String, amountStr: String, category: String,
+    isExpense: Boolean, locationName: String, lat: Double, lng: Double
 ) {
-    val amountVal = amountStr.toDoubleOrNull() ?: 0.0
+    val amountVal   = amountStr.toDoubleOrNull() ?: 0.0
     val finalAmount = if (isExpense) -amountVal else amountVal
-
-    if (selectedExpense != null) {
-        viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
-    } else {
-        viewModel.addExpense(name, finalAmount, category, locationName, lat, lng)
-    }
+    if (selectedExpense != null) viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
+    else viewModel.addExpense(name, finalAmount, category, locationName, lat, lng)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processImage — updated signature
+//
+// isReceiptMode = true  → onReceiptComplete callback, onProductComplete ignored
+// isReceiptMode = false → onProductComplete callback, onReceiptComplete ignored
+// countryIso            → null for receipt mode (unused) and for international
+//                         product mode; ISO string (e.g. "RO") for local mode
+// ─────────────────────────────────────────────────────────────────────────────
 
 fun processImage(
     context: Context,
@@ -747,42 +791,50 @@ fun processImage(
     isReceiptMode: Boolean,
     geminiParser: GeminiReceiptParser,
     scope: CoroutineScope,
+    countryIso: String?,
     onLoading: () -> Unit,
-    onComplete: (String?, String?, Double?, String) -> Unit
+    onReceiptComplete: (String?, String?, Double?, String) -> Unit,
+    onProductComplete: (ProductResult?) -> Unit
 ) {
     onLoading()
 
     if (isReceiptMode) {
         try {
-            val image = InputImage.fromFilePath(context, uri)
+            val image      = InputImage.fromFilePath(context, uri)
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
                     scope.launch {
                         val result = geminiParser.parseReceiptText(visionText.text)
-                        if (result != null) onComplete(result.merchant, result.address, result.total, visionText.text)
-                        else onComplete(null, null, null, visionText.text)
+                        if (result != null) onReceiptComplete(result.merchant, result.address, result.total, visionText.text)
+                        else onReceiptComplete(null, null, null, visionText.text)
                     }
                 }
-                .addOnFailureListener { onComplete(null, null, null, "OCR Failed") }
-        } catch (e: IOException) { onComplete(null, null, null, "Error") }
+                .addOnFailureListener { onReceiptComplete(null, null, null, "OCR Failed") }
+        } catch (e: IOException) { onReceiptComplete(null, null, null, "Error") }
+
     } else {
         scope.launch {
             try {
                 val inputStream = context.contentResolver.openInputStream(uri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
+                val bitmap      = BitmapFactory.decodeStream(inputStream)
 
-                val locale = Locale.getDefault()
-                val country = locale.displayCountry.takeIf { it.isNotEmpty() } ?: "Romania"
-                val currencyCode = try { Currency.getInstance(locale).currencyCode } catch(e:Exception) { "RON" }
+                val currency = when (countryIso?.uppercase()) {
+                    "RO"                   -> "RON"
+                    "DE", "FR", "IT", "ES", "NL", "BE", "AT", "PT" -> "EUR"
+                    "GB"                   -> "GBP"
+                    "US"                   -> "USD"
+                    "CA"                   -> "CAD"
+                    "AU"                   -> "AUD"
+                    else                   -> "USD"
+                }
 
-                val result = geminiParser.identifyProduct(bitmap, country, currencyCode)
-
-                if (result != null) onComplete(result.merchant, null, result.total, "Product Scan")
-                else onComplete(null, null, null, "Could not identify product")
+                val result = geminiParser.identifyProduct(bitmap, countryIso, currency)
+                onProductComplete(result)
 
             } catch (e: Exception) {
-                onComplete(null, null, null, "Error processing image")
+                Log.e("ExpensesScreen", "Product scan failed: ${e.message}")
+                onProductComplete(null)
             }
         }
     }

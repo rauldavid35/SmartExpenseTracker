@@ -7,12 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,12 +17,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.ui.components.VoiceInputDialog
+import com.example.smartexpensetracker.ui.components.VoiceParseMode
 import com.example.smartexpensetracker.ui.theme.ExpenseRed
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
+import com.example.smartexpensetracker.utils.VoiceParser
+import com.example.smartexpensetracker.utils.VoiceParseResult
 import com.example.smartexpensetracker.viewmodel.ListsViewModel
 import com.example.smartexpensetracker.model.ShoppingListData
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +37,7 @@ fun ListsScreenWithFirebase(
     externalVoiceTrigger: Boolean = false,
     onExternalTriggerHandled: () -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
     val shoppingLists by viewModel.shoppingLists.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -45,107 +45,87 @@ fun ListsScreenWithFirebase(
     var listToEdit by remember { mutableStateOf<ShoppingListData?>(null) }
     var showVoiceInput by remember { mutableStateOf(false) }
 
-    // --- HANDLE SHAKE TRIGGER ---
+    // ── Voice state ───────────────────────────────────────────────────────────
+    val voiceParser = remember { VoiceParser(apiKey = "key") }
+    var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
+    var isVoiceParsing   by remember { mutableStateOf(false) }
+
+    // External trigger (shake / volume)
     LaunchedEffect(externalVoiceTrigger) {
         if (externalVoiceTrigger) {
-            showVoiceInput = true
+            voiceParseResult = null
+            isVoiceParsing   = false
+            showVoiceInput   = true
             onExternalTriggerHandled()
         }
     }
 
-    // --- LOGIC: Parse Voice Command ---
-    // Format: "[My List Name] item [Item 1] item [Item 2]"
-    // Example: "Grocery Store item Eggs item Milk"
-    // Result: List Name = "Grocery Store", Items = ["Eggs", "Milk"]
-    fun processListVoiceCommand(text: String) {
-        // Normalize text
-        val lowerText = text.lowercase()
+    // ── Parse voice transcript for a shopping list ────────────────────────────
+    fun processListVoiceCommand(transcript: String) {
+        if (transcript.isBlank()) {
+            voiceParseResult = null
+            isVoiceParsing   = false
+            return
+        }
+        isVoiceParsing   = true
+        voiceParseResult = null
+        scope.launch {
+            val result = voiceParser.parseShoppingList(transcript)
+            voiceParseResult = result
+            isVoiceParsing   = false
+        }
+    }
 
-        // 1. Clean up "list" keyword if present at start
-        val content = if (lowerText.startsWith("list ")) text.substring(5).trim() else text
-
-        // 2. Split by "item" keyword
-        // Regex splits on " item " surrounded by spaces to act as a separator
-        // We use (?i) for case insensitivity
-        val parts = content.split(Regex("(?i)\\s+item\\s+"))
-
-        if (parts.isNotEmpty()) {
-            // First part is always the List Name
-            val listName = parts[0].trim().replaceFirstChar { it.uppercase() }
-
-            if (listName.isNotBlank()) {
-                // 3. Create List and get ID via callback
-                viewModel.addList(listName) { newListId ->
-                    // 4. Add remaining parts as items
-                    // Loop from index 1 to end (skip index 0 which is the name)
-                    for (i in 1 until parts.size) {
-                        val itemText = parts[i].trim().replaceFirstChar { it.uppercase() }
-                        if (itemText.isNotBlank()) {
-                            viewModel.addListItem(newListId, itemText)
-                        }
-                    }
-                }
+    // ── Confirm handler: create list + add all items atomically ──────────────
+    fun confirmShoppingListResult(result: VoiceParseResult.ShoppingListResult) {
+        viewModel.addList(result.listName) { newListId ->
+            result.items.forEach { item ->
+                viewModel.addListItem(newListId, item)
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // --- Top Bar ---
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+
+        // ── Top Bar ───────────────────────────────────────────────────────────
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(
                 onClick = onMenuClick,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PrimaryGreen)
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryGreen)
             ) {
-                Icon(Icons.Default.Wallet, contentDescription = "Menu", tint = Color.White)
+                Icon(Icons.Default.Wallet, "Menu", tint = Color.White)
             }
+
             Text("Shopping Lists", style = MaterialTheme.typography.headlineSmall)
 
             Row {
-                // Voice Button
+                // Voice button
                 IconButton(
-                    onClick = { showVoiceInput = true },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(LightMint)
+                    onClick = {
+                        voiceParseResult = null
+                        isVoiceParsing = false
+                        showVoiceInput = true
+                    },
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint)
                 ) {
                     Icon(Icons.Default.Mic, "Voice Input", tint = PrimaryGreen)
                 }
-
                 Spacer(modifier = Modifier.width(8.dp))
-
                 FloatingActionButton(
-                    onClick = {
-                        listToEdit = null
-                        newListName = ""
-                        showAddDialog = true
-                    },
-                    containerColor = PrimaryGreen,
-                    modifier = Modifier.size(48.dp)
+                    onClick = { listToEdit = null; newListName = ""; showAddDialog = true },
+                    containerColor = PrimaryGreen, modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
+                    Icon(Icons.Default.Add, "Add", tint = Color.White)
                 }
             }
         }
 
-        // --- List of Shopping Lists ---
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        // ── List of Shopping Lists ────────────────────────────────────────────
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(shoppingLists) { list ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -153,38 +133,23 @@ fun ListsScreenWithFirebase(
                     modifier = Modifier.clickable { onListClick(list.id, list.name) }
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(20.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(LightMint),
+                            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.ShoppingCart, null, tint = PrimaryGreen)
                         }
-
                         Spacer(modifier = Modifier.width(16.dp))
-
                         Column(modifier = Modifier.weight(1f)) {
                             Text(list.name, style = MaterialTheme.typography.titleMedium)
                             Text("Items: ${list.itemCount}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         }
-
-                        // Edit Button
-                        IconButton(onClick = {
-                            listToEdit = list
-                            newListName = list.name
-                            showAddDialog = true
-                        }) {
+                        IconButton(onClick = { listToEdit = list; newListName = list.name; showAddDialog = true }) {
                             Icon(Icons.Default.Edit, null, tint = TextSecondary)
                         }
-
-                        // Delete Button
                         IconButton(onClick = { viewModel.deleteList(list.id) }) {
                             Icon(Icons.Default.Delete, null, tint = ExpenseRed)
                         }
@@ -194,25 +159,35 @@ fun ListsScreenWithFirebase(
         }
     }
 
-    // --- Voice Input Dialog ---
+    // ── Voice Input Dialog ────────────────────────────────────────────────────
     if (showVoiceInput) {
         VoiceInputDialog(
+            mode         = VoiceParseMode.SHOPPING_LIST,
+            parseResult  = voiceParseResult,
+            isParsing    = isVoiceParsing,
             onTextReceived = { text ->
                 processListVoiceCommand(text)
-                showVoiceInput = false
             },
-            onDismiss = { showVoiceInput = false }
+            onResultConfirmed = { result ->
+                if (result is VoiceParseResult.ShoppingListResult) {
+                    confirmShoppingListResult(result)
+                    showVoiceInput   = false
+                    voiceParseResult = null
+                    isVoiceParsing   = false
+                }
+            },
+            onDismiss = {
+                showVoiceInput   = false
+                voiceParseResult = null
+                isVoiceParsing   = false
+            }
         )
     }
 
-    // --- Add / Rename Dialog ---
+    // ── Manual Add / Rename Dialog ────────────────────────────────────────────
     if (showAddDialog) {
         AlertDialog(
-            onDismissRequest = {
-                showAddDialog = false
-                listToEdit = null
-                newListName = ""
-            },
+            onDismissRequest = { showAddDialog = false; listToEdit = null; newListName = "" },
             title = { Text(if (listToEdit != null) "Rename List" else "New Shopping List") },
             text = {
                 OutlinedTextField(
@@ -226,14 +201,9 @@ fun ListsScreenWithFirebase(
                 Button(
                     onClick = {
                         if (newListName.isNotBlank()) {
-                            if (listToEdit != null) {
-                                viewModel.renameList(listToEdit!!.id, newListName)
-                            } else {
-                                viewModel.addList(newListName)
-                            }
-                            newListName = ""
-                            listToEdit = null
-                            showAddDialog = false
+                            if (listToEdit != null) viewModel.renameList(listToEdit!!.id, newListName)
+                            else viewModel.addList(newListName)
+                            newListName = ""; listToEdit = null; showAddDialog = false
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
@@ -242,11 +212,7 @@ fun ListsScreenWithFirebase(
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showAddDialog = false
-                    listToEdit = null
-                    newListName = ""
-                }) { Text("Cancel") }
+                TextButton(onClick = { showAddDialog = false; listToEdit = null; newListName = "" }) { Text("Cancel") }
             }
         )
     }

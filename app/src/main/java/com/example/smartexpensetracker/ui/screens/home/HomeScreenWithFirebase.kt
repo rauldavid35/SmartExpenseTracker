@@ -18,10 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.model.NoteData
+import com.example.smartexpensetracker.ui.components.VoiceParseMode
 import com.example.smartexpensetracker.viewmodel.NotesViewModel
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
+import com.example.smartexpensetracker.utils.VoiceParseResult
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -39,10 +41,9 @@ fun HomeScreenWithFirebase(
     var showVoiceDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -50,11 +51,9 @@ fun HomeScreenWithFirebase(
                 .padding(padding)
         ) {
             item {
-                // Top Bar with Menu Icon
+                // Top Bar
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
@@ -64,105 +63,53 @@ fun HomeScreenWithFirebase(
                             .clip(RoundedCornerShape(16.dp))
                             .background(PrimaryGreen)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Wallet,
-                            contentDescription = "Menu",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.Wallet, "Menu", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
                 }
 
                 // Welcome Section
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape)
-                            .background(LightMint),
+                        modifier = Modifier.size(80.dp).clip(CircleShape).background(LightMint),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Welcome",
-                            tint = PrimaryGreen,
-                            modifier = Modifier.size(40.dp)
-                        )
+                        Icon(Icons.Default.AutoAwesome, "Welcome", tint = PrimaryGreen, modifier = Modifier.size(40.dp))
                     }
-
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Welcome Back!",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-
+                    Text("Welcome Back!", style = MaterialTheme.typography.headlineMedium)
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Let's keep track of your finances today",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary
-                    )
+                    Text("Let's keep track of your finances today", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // Notes Card
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    ),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                     shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(2.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = "Notes",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            }
+                            Text("Notes", style = MaterialTheme.typography.titleLarge)
+                            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Add Note Input
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = noteText,
                                 onValueChange = { noteText = it },
-                                placeholder = {
-                                    Text(
-                                        text = "Add a note...",
-                                        color = TextSecondary
-                                    )
-                                },
+                                placeholder = { Text("Add a note…", color = TextSecondary) },
                                 modifier = Modifier.weight(1f),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = PrimaryGreen,
@@ -173,19 +120,18 @@ fun HomeScreenWithFirebase(
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            // Voice Input Button
+                            // ── Voice button ──────────────────────────────────
                             IconButton(
-                                onClick = { showVoiceDialog = true },
+                                onClick = {
+                                    voiceParseResult = null
+                                    showVoiceDialog = true
+                                },
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(LightMint)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = "Voice Input",
-                                    tint = PrimaryGreen
-                                )
+                                Icon(Icons.Default.Mic, "Voice Input", tint = PrimaryGreen)
                             }
 
                             Spacer(modifier = Modifier.width(8.dp))
@@ -203,11 +149,7 @@ fun HomeScreenWithFirebase(
                                 containerColor = PrimaryGreen,
                                 modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Add Note",
-                                    tint = Color.White
-                                )
+                                Icon(Icons.Default.Add, "Add Note", tint = Color.White)
                             }
                         }
 
@@ -218,7 +160,6 @@ fun HomeScreenWithFirebase(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Notes List
             items(notes) { note ->
                 NoteItemFirebase(
                     note = note,
@@ -235,30 +176,39 @@ fun HomeScreenWithFirebase(
 
             item {
                 if (notes.isEmpty() && !isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No notes yet. Add your first note!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("No notes yet. Add your first note!", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                     }
                 }
             }
         }
     }
 
+    // ── Voice dialog ──────────────────────────────────────────────────────────
     if (showVoiceDialog) {
         VoiceInputDialog(
+            mode        = VoiceParseMode.NOTE,
+            parseResult = voiceParseResult,
+            isParsing   = false, // Notes never need AI parsing
             onTextReceived = { text ->
-                noteText = text
-                showVoiceDialog = false
+                if (text.isNotBlank()) {
+                    voiceParseResult = VoiceParseResult.NoteResult(text)
+                } else {
+                    // text is blank → Retry was pressed → clear so Listening shows
+                    voiceParseResult = null
+                }
             },
-            onDismiss = { showVoiceDialog = false }
+            onResultConfirmed = { result ->
+                if (result is VoiceParseResult.NoteResult) {
+                    noteText = result.text
+                    showVoiceDialog = false
+                    voiceParseResult = null
+                }
+            },
+            onDismiss = {
+                showVoiceDialog = false
+                voiceParseResult = null
+            }
         )
     }
 }
@@ -270,7 +220,6 @@ fun NoteItemFirebase(
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()) }
-
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -278,31 +227,16 @@ fun NoteItemFirebase(
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = note.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Text(note.text, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = dateFormat.format(Date(note.date)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
+                Text(dateFormat.format(Date(note.date)), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
-
             IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = TextSecondary
-                )
+                Icon(Icons.Default.Delete, "Delete", tint = TextSecondary)
             }
         }
     }
