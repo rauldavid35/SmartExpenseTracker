@@ -432,12 +432,22 @@ fun ExpensesScreenWithFirebase(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                        // ── Expense / Income toggle ───────────────────────────────────
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isExpense, onCheckedChange = { isExpense = it })
-                            Text("Is Expense?")
+                            Checkbox(
+                                checked = isExpense,
+                                onCheckedChange = { nowExpense ->
+                                    isExpense = nowExpense
+                                    // Reset to "Income" when switching to income so no
+                                    // budget category is accidentally pre-selected.
+                                    if (!nowExpense) selectedCategoryName = "Income"
+                                }
+                            )
+                            Text(if (isExpense) "Expense" else "Income")
                         }
 
                         if (isExpense) {
+                            // ── EXPENSE: mandatory category picker (unchanged) ────────────
                             Spacer(modifier = Modifier.height(8.dp))
                             var expanded by remember { mutableStateOf(false) }
                             var showNewCategoryField by remember { mutableStateOf(false) }
@@ -515,6 +525,103 @@ fun ExpensesScreenWithFirebase(
                                     }
                                 }
                             }
+
+                        } else {
+                            // ── INCOME: optional category budget boost ────────────────────
+                            //
+                            // Income ALWAYS boosts the general budget total automatically.
+                            // The user can OPTIONALLY also pick a specific budget category
+                            // to extend that category's spending limit by this income amount.
+                            //
+                            // selectedCategoryName == "Income"   → general budget only
+                            // selectedCategoryName == <cat name> → general budget + that category limit
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Info hint card
+                            Card(
+                                colors   = CardDefaults.cardColors(containerColor = LightMint),
+                                shape    = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier          = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint     = PrimaryGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "This income is always added to your general budget. " +
+                                                "You can also choose to extend a specific category's limit.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = PrimaryGreen
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Optional category boost dropdown
+                            var incomeExpanded by remember { mutableStateOf(false) }
+                            val noneLabel = "General budget only"
+                            val displayValue = if (selectedCategoryName == "Income") noneLabel else selectedCategoryName
+
+                            ExposedDropdownMenuBox(
+                                expanded         = incomeExpanded,
+                                onExpandedChange = { incomeExpanded = !incomeExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value         = displayValue,
+                                    onValueChange = {},
+                                    readOnly      = true,
+                                    label         = { Text("Also boost category (optional)") },
+                                    trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = incomeExpanded) },
+                                    modifier      = Modifier.menuAnchor().fillMaxWidth()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded         = incomeExpanded,
+                                    onDismissRequest = { incomeExpanded = false }
+                                ) {
+                                    // "None" — general budget only
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.AccountBalanceWallet,
+                                                    contentDescription = null,
+                                                    tint     = PrimaryGreen,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(noneLabel)
+                                            }
+                                        },
+                                        onClick = { selectedCategoryName = "Income"; incomeExpanded = false }
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    // All budget categories except "Income" itself
+                                    availableCategories.filter { it != "Income" }.forEach { cat ->
+                                        DropdownMenuItem(
+                                            text    = { Text(cat) },
+                                            onClick = { selectedCategoryName = cat; incomeExpanded = false }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Confirmation hint when a category is chosen
+                            if (selectedCategoryName != "Income") {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    "✓ Will also extend the \"$selectedCategoryName\" budget by $${amount.ifBlank { "0" }}.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = PrimaryGreen
+                                )
+                            }
                         }
                     }
                 },
@@ -536,6 +643,16 @@ fun ExpensesScreenWithFirebase(
                                     if (coords != null) {
                                         viewModel.updateLastLocation(coords.first, coords.second)
                                         lat = coords.first; lng = coords.second
+                                    }
+                                    val amountVal = amount.toDoubleOrNull() ?: 0.0
+                                    if (isExpense && amountVal > 0) {
+                                        val anomaly = viewModel.checkAnomaly(amountVal, selectedCategoryName)
+                                        if (anomaly.isAnomaly) {
+                                            anomalyAverage = anomaly.average
+                                            showAddDialog  = false
+                                            showAnomalyDialog = true
+                                            return@launch   // stop — anomaly dialog takes over
+                                        }
                                     }
                                     showAddDialog = false; showLocationDialog = true
                                 }
@@ -748,13 +865,13 @@ fun ExpensesScreenWithFirebase(
         if (showAnomalyDialog) {
             AlertDialog(
                 onDismissRequest = { showAnomalyDialog = false; showAddDialog = true },
-                title = { Text("Sumă neobișnuită 🚨", color = ExpenseRed) },
-                text  = { Text("Suma introdusă ($amount RON) este mult mai mare decât media ta obișnuită pentru '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nEști sigur că e corect?") },
+                title = { Text("Unusual Amount 🚨", color = ExpenseRed) },
+                text  = { Text("The amount entered ($amount RON) is much higher than your usual average for '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nAre you sure this is correct?") },
                 confirmButton = {
-                    Button(onClick = { showAnomalyDialog = false; showLocationDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)) { Text("Da, e corect") }
+                    Button(onClick = { showAnomalyDialog = false; showLocationDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)) { Text("Yes, it's correct") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showAnomalyDialog = false; showAddDialog = true }) { Text("Vreau să modific") }
+                    TextButton(onClick = { showAnomalyDialog = false; showAddDialog = true }) { Text("Let me change it") }
                 }
             )
         }
@@ -762,7 +879,7 @@ fun ExpensesScreenWithFirebase(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// saveTransaction — unchanged
+// saveTransaction
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun saveTransaction(
@@ -772,6 +889,11 @@ fun saveTransaction(
 ) {
     val amountVal   = amountStr.toDoubleOrNull() ?: 0.0
     val finalAmount = if (isExpense) -amountVal else amountVal
+    // For expenses: use the chosen category directly.
+    // For income:   category is either "Income" (general budget only) or a specific
+    //               budget category name (user wants to extend that category's limit too).
+    //               Either way we store it as-is; BudgetViewModel handles the logic.
+    //               The positive amount ensures spentMap (amount < 0 filter) never counts it.
     if (selectedExpense != null) viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
     else viewModel.addExpense(name, finalAmount, category, locationName, lat, lng)
 }

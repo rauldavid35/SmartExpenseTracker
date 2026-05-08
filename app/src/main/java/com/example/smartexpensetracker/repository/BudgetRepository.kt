@@ -25,6 +25,9 @@ class BudgetRepository {
     private fun getCategorySettings(userId: String) =
         getBudgetDoc(userId).collection("categorySettings")
 
+    private fun getSharedCategories(userId: String) =
+        db.collection("users").document(userId).collection("categories")
+
     fun getMonthlyBudget(userId: String): Flow<MonthlyBudget?> = callbackFlow {
         val subscription = getBudgetDoc(userId)
             .addSnapshotListener { snapshot, _ ->
@@ -60,6 +63,11 @@ class BudgetRepository {
     ) {
         val setting = BudgetCategorySetting(name, limit, colorHex)
         getCategorySettings(userId).document(name).set(setting).await()
+
+        getSharedCategories(userId)
+            .document(name)
+            .set(mapOf("active" to true), SetOptions.merge())
+            .await()
     }
 
     suspend fun deleteCategory(userId: String, name: String) {
