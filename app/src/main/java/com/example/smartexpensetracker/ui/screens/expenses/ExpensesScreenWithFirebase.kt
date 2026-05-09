@@ -41,6 +41,7 @@ import com.example.smartexpensetracker.ui.components.ProductScanDialog
 import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.ui.components.VoiceParseMode
 import com.example.smartexpensetracker.ui.components.takePhoto
+import com.example.smartexpensetracker.ui.navigation.MoneyText
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.utils.GeminiReceiptParser
 import com.example.smartexpensetracker.utils.LocationHelper
@@ -77,9 +78,9 @@ fun ExpensesScreenWithFirebase(
     val availableCategories  by viewModel.categories.collectAsState()
     val isLoading            by viewModel.isLoading.collectAsState()
 
-    val geminiParser  = remember { GeminiReceiptParser("AIzaSyBB-OaS2PDQkEv4XvRoPOAsAIQ9_PiL6RM") }
+    val geminiParser  = remember { GeminiReceiptParser("key") }
     val locationHelper = remember { LocationHelper(context) }
-    val voiceParser   = remember { VoiceParser(apiKey = "AIzaSyBB-OaS2PDQkEv4XvRoPOAsAIQ9_PiL6RM") }
+    val voiceParser   = remember { VoiceParser(apiKey = "key") }
 
     val cameraPermission   = rememberPermissionState(Manifest.permission.CAMERA)
     val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -270,7 +271,7 @@ fun ExpensesScreenWithFirebase(
                             else cameraPermission.launchPermissionRequest()
                         },
                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
-                            .background(Color.LightGray.copy(alpha = 0.3f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) { Icon(Icons.Default.CameraAlt, "Scan", tint = PrimaryGreen) }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -289,17 +290,17 @@ fun ExpensesScreenWithFirebase(
 
             // Summary cards
             Row(modifier = Modifier.padding(16.dp)) {
-                Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Expenses", color = TextSecondary)
-                        Text("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge)
+                        MoneyText("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge)
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Income", color = TextSecondary)
-                        Text("$${String.format("%.2f", totalIncome)}", color = IncomeGreen, style = MaterialTheme.typography.titleLarge)
+                        MoneyText("$${String.format("%.2f", totalIncome)}", color = IncomeGreen, style = MaterialTheme.typography.titleLarge)
                     }
                 }
             }
@@ -315,7 +316,7 @@ fun ExpensesScreenWithFirebase(
             ) {
                 items(expenses) { transaction ->
                     Card(
-                        colors   = CardDefaults.cardColors(containerColor = Color.White),
+                        colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         modifier = Modifier.clickable {
                             selectedExpense = transaction
                             name = transaction.name
@@ -338,7 +339,7 @@ fun ExpensesScreenWithFirebase(
                                     color = TextSecondary
                                 )
                             }
-                            Text(
+                            MoneyText(
                                 text  = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}",
                                 color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
                                 style = MaterialTheme.typography.titleMedium
@@ -951,7 +952,7 @@ fun ExpensesScreenWithFirebase(
         // AI loading spinner
         if (isProcessingAI) {
             Dialog(onDismissRequest = {}) {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = PrimaryGreen)
                         Spacer(modifier = Modifier.height(16.dp))

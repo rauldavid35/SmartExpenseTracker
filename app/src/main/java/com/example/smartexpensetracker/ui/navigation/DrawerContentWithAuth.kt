@@ -26,7 +26,7 @@ fun DrawerContentWithAuth(
     onLogout: () -> Unit,
     onExport: () -> Unit = {}          // ← NEW
 ) {
-    ModalDrawerSheet(drawerContainerColor = Color.White) {
+    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

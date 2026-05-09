@@ -19,7 +19,7 @@ import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 @Composable
 fun DrawerContent(onNavigate: (String) -> Unit) {
     ModalDrawerSheet(
-        drawerContainerColor = Color.White
+        drawerContainerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier

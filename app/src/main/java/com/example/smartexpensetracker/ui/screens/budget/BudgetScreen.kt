@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.model.*
 import com.example.smartexpensetracker.ui.components.CreateDashboardDialog
 import com.example.smartexpensetracker.ui.components.charts.*
+import com.example.smartexpensetracker.ui.navigation.MoneyText
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.viewmodel.BudgetViewModel
 import java.text.SimpleDateFormat
@@ -109,7 +110,7 @@ fun BudgetScreen(
             // ── Tabs ─────────────────────────────────────────────────────────
             TabRow(
                 selectedTabIndex = selectedTab.ordinal,
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = PrimaryGreen,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -224,12 +225,12 @@ private fun BudgetTabContent(
                     }
                     Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
+                        MoneyText(
                             "$${String.format("%.0f", totalSpent)}",
                             style = MaterialTheme.typography.displayMedium,
                             color = Color.White
                         )
-                        Text(
+                        MoneyText(
                             " / $${String.format("%.0f", totalBudget)}",
                             style = MaterialTheme.typography.titleLarge,
                             color = Color.White.copy(alpha = 0.8f),
@@ -272,10 +273,10 @@ private fun BudgetTabContent(
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFFD1D5DB), modifier = Modifier.size(64.dp))
+                    Icon(Icons.Default.AccountBalanceWallet, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("No categories yet", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-                    Text("Tap + to add a spending category", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text("No categories yet", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Tap + to add a spending category", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -305,11 +306,11 @@ private fun DashboardTabContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.Dashboard, null, tint = Color(0xFFD1D5DB), modifier = Modifier.size(80.dp))
+            Icon(Icons.Default.Dashboard, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(80.dp))
             Spacer(Modifier.height(16.dp))
-            Text("No dashboards yet", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+            Text("No dashboards yet", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(6.dp))
-            Text("Tap + to build your first dashboard", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text("Tap + to build your first dashboard", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = onAdd,
@@ -356,7 +357,7 @@ private fun DashboardCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column {
@@ -375,7 +376,7 @@ private fun DashboardCard(
                     Text(
                         "${dashboard.widgets.size} widget${if (dashboard.widgets.size != 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 // Widget preview chips
@@ -396,13 +397,13 @@ private fun DashboardCard(
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     null,
-                    tint = Color.Gray
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Expanded widget area
             if (expanded) {
-                HorizontalDivider(color = Color(0xFFF3F4F6))
+                HorizontalDivider()
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -635,7 +636,7 @@ fun CategoryBudgetItem(category: CategoryBudgetView, onClick: () -> Unit) {
     }
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
@@ -647,12 +648,12 @@ fun CategoryBudgetItem(category: CategoryBudgetView, onClick: () -> Unit) {
             ) {
                 Text(category.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
+                    MoneyText(
                         "$${String.format("%.2f", category.spent)}",
                         style = MaterialTheme.typography.titleMedium,
                         color = if (category.spent > category.budget) Color.Red else MaterialTheme.colorScheme.onSurface
                     )
-                    Text("of $${String.format("%.2f", category.budget)}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    MoneyText("of $${String.format("%.2f", category.budget)}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -663,7 +664,7 @@ fun CategoryBudgetItem(category: CategoryBudgetView, onClick: () -> Unit) {
                 progress = { progress.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                 color = if (progress > 1f) Color.Red else categoryColor,
-                trackColor = Color(0xFFF3F4F6)
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
             Spacer(Modifier.height(8.dp))
             Text("${(progress * 100).toInt()}% used", style = MaterialTheme.typography.bodySmall, color = if (progress > 1f) Color.Red else TextSecondary)

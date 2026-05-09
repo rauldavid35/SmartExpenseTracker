@@ -221,7 +221,7 @@ private fun ProfileRow(icon: ImageVector, label: String, value: String, onClick:
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -235,7 +235,7 @@ private fun ProfileRow(icon: ImageVector, label: String, value: String, onClick:
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(value, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             Spacer(Modifier.width(4.dp))
-            Icon(Icons.Default.ChevronRight, null, tint = Color.LightGray, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }

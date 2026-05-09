@@ -170,7 +170,7 @@ fun MainScreen(
         Dialog(onDismissRequest = { showShakeMenu = false }) {
             Card(
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.padding(16.dp)
             ) {
                 Column(

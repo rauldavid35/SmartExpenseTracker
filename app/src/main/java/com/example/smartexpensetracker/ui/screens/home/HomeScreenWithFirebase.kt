@@ -131,7 +131,7 @@ fun HomeScreenWithFirebase(
                 // ── Notes card ────────────────────────────────────────────────
                 Card(
                     modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    colors    = CardDefaults.cardColors(containerColor = Color.White),
+                    colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape     = RoundedCornerShape(20.dp),
                     elevation = CardDefaults.cardElevation(2.dp)
                 ) {
@@ -158,7 +158,7 @@ fun HomeScreenWithFirebase(
                                 modifier      = Modifier.weight(1f),
                                 colors        = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor   = PrimaryGreen,
-                                    unfocusedBorderColor = Color.LightGray
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -305,7 +305,7 @@ fun NoteItemFirebase(
 ) {
     Card(
         modifier  = modifier.fillMaxWidth(),
-        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape     = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {

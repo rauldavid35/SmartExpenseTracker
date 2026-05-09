@@ -3,10 +3,14 @@ package com.example.smartexpensetracker.ui.navigation
 import android.content.Context
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import com.example.smartexpensetracker.ui.screens.auth.AuthScreen
 import com.example.smartexpensetracker.ui.theme.SmartExpenseTrackerTheme
 import com.example.smartexpensetracker.utils.BiometricPromptManager
@@ -16,6 +20,45 @@ import com.google.firebase.auth.FirebaseAuth
 
 // ── Composition local so any screen can read privacyMode without prop-drilling ─
 val LocalPrivacyMode = staticCompositionLocalOf { false }
+
+// ── Privacy helpers ───────────────────────────────────────────────────────────
+//
+// MoneyText is the canonical way to render any monetary value in the UI.
+// When privacy mode is on, it replaces digits with bullets so the layout
+// stays roughly the same width but the actual figure is hidden.
+//
+// Pattern: replace every Text("$${...amount...}") with MoneyText("$${...amount...}").
+// The currency symbol / sign / formatting stays — only digits get masked.
+
+/**
+ * Mask digits in a money string with • characters when [masked] is true.
+ * Keeps non-digit characters (currency symbols, signs, spaces, decimal separators)
+ * so the result reads as e.g. "$••••.••" instead of leaking the magnitude.
+ */
+fun maskMoney(value: String, masked: Boolean): String =
+    if (!masked) value else buildString(value.length) {
+        for (c in value) append(if (c.isDigit()) '•' else c)
+    }
+
+/**
+ * Drop-in replacement for `Text(...)` for any monetary value.
+ * Reads [LocalPrivacyMode] and masks digits automatically.
+ */
+@Composable
+fun MoneyText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    style: TextStyle = LocalTextStyle.current
+) {
+    val masked = LocalPrivacyMode.current
+    Text(
+        text     = maskMoney(text, masked),
+        modifier = modifier,
+        color    = color,
+        style    = style
+    )
+}
 
 @Composable
 fun MainApp(
