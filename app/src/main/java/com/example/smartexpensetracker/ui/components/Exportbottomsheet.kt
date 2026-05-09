@@ -93,19 +93,23 @@ fun ExportBottomSheet(
             Text("File format", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ExportFormat.entries.forEach { fmt ->
-                    FormatChip(
-                        label = fmt.name,
-                        subtitle = formatSubtitle(fmt),
-                        selected = selectedFormat == fmt,
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedFormat = fmt }
-                    )
+            // Row 1: recommended (XLSX opens in Excel/Sheets, PDF is printable)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(ExportFormat.XLSX, ExportFormat.PDF, ExportFormat.CSV).forEach { fmt ->
+                    FormatChip(label = fmt.name, subtitle = formatSubtitle(fmt),
+                        selected = selectedFormat == fmt, modifier = Modifier.weight(1f),
+                        onClick = { selectedFormat = fmt })
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            // Row 2: developer/data formats
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(ExportFormat.JSON, ExportFormat.XML).forEach { fmt ->
+                    FormatChip(label = fmt.name, subtitle = formatSubtitle(fmt),
+                        selected = selectedFormat == fmt, modifier = Modifier.weight(1f),
+                        onClick = { selectedFormat = fmt })
+                }
+                Spacer(Modifier.weight(1f))
             }
 
             Spacer(Modifier.height(28.dp))
@@ -118,7 +122,10 @@ fun ExportBottomSheet(
                     try {
                         val intent = viewModel.buildExportIntent(context, selectedFormat, selectedScope)
                         context.startActivity(intent)
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                        android.util.Log.e("Export", "Export failed", e)
+                        android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
                     isExporting = false
                     onDismiss()
                 },
@@ -219,7 +226,9 @@ private fun scopeMeta(scope: ExportScope): Pair<ImageVector, String> = when (sco
 }
 
 private fun formatSubtitle(fmt: ExportFormat) = when (fmt) {
-    ExportFormat.CSV -> "Spreadsheet"
+    ExportFormat.XLSX -> "Excel ★"
+    ExportFormat.PDF  -> "Printable ★"
+    ExportFormat.CSV  -> "Spreadsheet"
     ExportFormat.JSON -> "Structured"
-    ExportFormat.XML -> "Universal"
+    ExportFormat.XML  -> "Universal"
 }

@@ -91,4 +91,9 @@ dependencies {
     // --- OPEN STREET MAP (Replaces Google Maps) ---
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    //  Export formats
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+    implementation("org.apache.poi:poi-ooxml-lite:5.2.5")
+    implementation("org.apache.xmlbeans:xmlbeans:5.1.1")
 }

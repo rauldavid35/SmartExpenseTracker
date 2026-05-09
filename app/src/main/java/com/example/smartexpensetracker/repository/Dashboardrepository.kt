@@ -12,11 +12,12 @@ import java.util.UUID
 
 /**
  * Fully offline, local-only dashboard storage via SharedPreferences + JSON.
+ * Scoped per user via [userId] so each account has its own dashboards.
  * No Firebase, no network calls.
  */
-class DashboardRepository(context: Context) {
+class DashboardRepository(context: Context, userId: String) {
 
-    private val prefs = context.getSharedPreferences("dashboards_prefs", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("dashboards_$userId", Context.MODE_PRIVATE)
     private val KEY = "dashboards_json"
 
     private val _dashboards = MutableStateFlow<List<Dashboard>>(load())
@@ -35,8 +36,8 @@ class DashboardRepository(context: Context) {
                     try { WidgetType.valueOf(widgetsArr.getString(j)) } catch (_: Exception) { null }
                 }
                 Dashboard(
-                    id = obj.getString("id"),
-                    name = obj.getString("name"),
+                    id      = obj.getString("id"),
+                    name    = obj.getString("name"),
                     widgets = widgets
                 )
             }
@@ -64,8 +65,8 @@ class DashboardRepository(context: Context) {
 
     fun createDashboard(name: String, widgets: List<WidgetType>): Dashboard {
         val dashboard = Dashboard(
-            id = UUID.randomUUID().toString(),
-            name = name,
+            id      = UUID.randomUUID().toString(),
+            name    = name,
             widgets = widgets
         )
         save(_dashboards.value + dashboard)

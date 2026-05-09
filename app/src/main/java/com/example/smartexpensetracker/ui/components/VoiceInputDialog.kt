@@ -2,9 +2,10 @@ package com.example.smartexpensetracker.ui.components
 
 import android.Manifest
 import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.speech.SpeechRecognizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,30 +44,87 @@ fun VoiceInputDialog(
     onResultConfirmed: (VoiceParseResult) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
-    var isListening   by remember { mutableStateOf(false) }
-    var rawTranscript by remember { mutableStateOf("") }
+    val context        = LocalContext.current
+    val micPermission  = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    var isListening    by remember { mutableStateOf(false) }
+    var rawTranscript  by remember { mutableStateOf("") }
 
-    // ── Single launcher — registered once at the top level, never recreated ───
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        isListening = false
-        val text = result.data
-            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            ?.firstOrNull()
-        if (!text.isNullOrBlank()) {
-            rawTranscript = text
-            onTextReceived(text)
+    // ── SpeechRecognizer lifecycle — created once, destroyed on dialog exit ───
+    val recognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context))
+            SpeechRecognizer.createSpeechRecognizer(context)
+        else null
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            recognizer?.destroy()
         }
-        // null/blank = user dismissed the STT dialog → stay on Listening phase
+    }
+
+    // Wire up the recognition listener once
+    LaunchedEffect(recognizer) {
+        recognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?)  { isListening = true }
+            override fun onBeginningOfSpeech()              { }
+            override fun onRmsChanged(rmsdB: Float)         { }
+            override fun onBufferReceived(buffer: ByteArray?){ }
+            override fun onPartialResults(partial: Bundle?) { }
+            override fun onEvent(eventType: Int, params: Bundle?) { }
+
+            override fun onEndOfSpeech() {
+                // Don't set isListening = false here — wait for result/error
+            }
+
+            override fun onResults(results: Bundle?) {
+                isListening = false
+                val text = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                if (!text.isNullOrBlank()) {
+                    rawTranscript = text
+                    onTextReceived(text)
+                }
+            }
+
+            override fun onError(error: Int) {
+                isListening = false
+                // ERROR_SPEECH_TIMEOUT or ERROR_NO_MATCH with partial = user stopped early
+                // Silently stay on listening phase so user can try again
+            }
+        })
+    }
+
+    fun startListening() {
+        rawTranscript = ""
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE,            VoiceParser.STT_LOCALE)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, VoiceParser.STT_LOCALE)
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
+            // Remove the system dialog prompt — we have our own UI
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
+        }
+        recognizer?.startListening(intent)
+    }
+
+    fun stopListening() {
+        // stopListening() triggers onResults with whatever was heard so far
+        recognizer?.stopListening()
     }
 
     LaunchedEffect(Unit) {
         if (!micPermission.status.isGranted) micPermission.launchPermissionRequest()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = {
+        recognizer?.cancel()
+        onDismiss()
+    }) {
         Card(
             modifier  = Modifier.fillMaxWidth().padding(16.dp),
             shape     = RoundedCornerShape(24.dp),
@@ -88,8 +147,6 @@ fun VoiceInputDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Plain when — no AnimatedContent, no key() — avoids all launcher
-                // lifecycle conflicts that caused the Retry crash.
                 when {
                     isParsing -> ParsingPhase(rawTranscript)
 
@@ -108,14 +165,12 @@ fun VoiceInputDialog(
                         isListening       = isListening,
                         hasPermission     = micPermission.status.isGranted,
                         mode              = mode,
-                        onMicClick        = {
-                            isListening   = true
-                            rawTranscript = ""
-                            // Fix #3 — English STT locale applied here
-                            launcher.launch(buildSpeechIntent(mode))
-                        },
+                        onMicClick        = { if (isListening) stopListening() else startListening() },
                         onGrantPermission = { micPermission.launchPermissionRequest() },
-                        onDismiss         = onDismiss
+                        onDismiss         = {
+                            recognizer?.cancel()
+                            onDismiss()
+                        }
                     )
                 }
             }
@@ -147,13 +202,12 @@ private fun ListeningPhase(
                 contentAlignment = Alignment.Center
             ) {
                 IconButton(
-                    onClick  = { if (!isListening) onMicClick() },
-                    modifier = Modifier.size(80.dp),
-                    enabled  = !isListening
+                    onClick  = onMicClick,
+                    modifier = Modifier.size(80.dp)
                 ) {
                     Icon(
-                        imageVector        = Icons.Default.Mic,
-                        contentDescription = "Microphone",
+                        imageVector        = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
+                        contentDescription = if (isListening) "Stop recording" else "Start recording",
                         tint               = if (isListening) PrimaryGreen else Color.Gray,
                         modifier           = Modifier.size(52.dp)
                     )
@@ -163,7 +217,7 @@ private fun ListeningPhase(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text  = if (isListening) "Listening…" else "Tap to speak",
+                text  = if (isListening) "Tap to stop" else "Tap to speak",
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (isListening) PrimaryGreen else TextSecondary
             )
@@ -342,21 +396,3 @@ private fun PreviewField(label: String, value: String, icon: ImageVector) {
         }
     }
 }
-
-// ── buildSpeechIntent — Fix #3: English STT locale locked here ───────────────
-
-private fun buildSpeechIntent(mode: VoiceParseMode): Intent =
-    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        // Lock STT to English — uses the same constant defined in VoiceParser
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE,            VoiceParser.STT_LOCALE)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, VoiceParser.STT_LOCALE)
-        putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
-        putExtra(RecognizerIntent.EXTRA_PROMPT, when (mode) {
-            VoiceParseMode.EXPENSE       -> "Say expense name, amount, category…"
-            VoiceParseMode.SHOPPING_LIST -> "Say list name then items…"
-            VoiceParseMode.NOTE          -> "Speak your note…"
-        })
-    }

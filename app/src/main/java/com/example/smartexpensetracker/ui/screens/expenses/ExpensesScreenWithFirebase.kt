@@ -77,9 +77,9 @@ fun ExpensesScreenWithFirebase(
     val availableCategories  by viewModel.categories.collectAsState()
     val isLoading            by viewModel.isLoading.collectAsState()
 
-    val geminiParser  = remember { GeminiReceiptParser("key") }
+    val geminiParser  = remember { GeminiReceiptParser("AIzaSyBB-OaS2PDQkEv4XvRoPOAsAIQ9_PiL6RM") }
     val locationHelper = remember { LocationHelper(context) }
-    val voiceParser   = remember { VoiceParser(apiKey = "key") }
+    val voiceParser   = remember { VoiceParser(apiKey = "AIzaSyBB-OaS2PDQkEv4XvRoPOAsAIQ9_PiL6RM") }
 
     val cameraPermission   = rememberPermissionState(Manifest.permission.CAMERA)
     val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -639,11 +639,11 @@ fun ExpensesScreenWithFirebase(
                         Button(
                             onClick = {
                                 scope.launch {
-                                    val coords = locationHelper.getCurrentLocation()
-                                    if (coords != null) {
-                                        viewModel.updateLastLocation(coords.first, coords.second)
-                                        lat = coords.first; lng = coords.second
-                                    }
+                                    // Reset coords — GPS is only fetched inside the location
+                                    // dialog if the user explicitly picks "Use GPS".
+                                    // This prevents real coordinates from leaking into
+                                    // transactions where the user chose "Skip" or "Search".
+                                    lat = 0.0; lng = 0.0; locationName = ""
                                     val amountVal = amount.toDoubleOrNull() ?: 0.0
                                     if (isExpense && amountVal > 0) {
                                         val anomaly = viewModel.checkAnomaly(amountVal, selectedCategoryName)
@@ -651,7 +651,7 @@ fun ExpensesScreenWithFirebase(
                                             anomalyAverage = anomaly.average
                                             showAddDialog  = false
                                             showAnomalyDialog = true
-                                            return@launch   // stop — anomaly dialog takes over
+                                            return@launch
                                         }
                                     }
                                     showAddDialog = false; showLocationDialog = true
@@ -665,34 +665,159 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
+        // Location dialog
         // Location / Photon dialog
         if (showLocationDialog) {
+            // locationMode:
+            //   "gps"    → fetch current GPS on Save
+            //   "search" → Photon text search, optionally biased to vicinity
+            //   "skip"   → save with lat=0, lng=0 (excluded from heatmap)
+            var locationMode    by remember { mutableStateOf("skip") }
+            var searchNearMe    by remember { mutableStateOf(false) }   // vicinity toggle
+            var isFetchingGps   by remember { mutableStateOf(false) }
+            var isLoadingVicinity by remember { mutableStateOf(false) }
+
             AlertDialog(
                 onDismissRequest = { showLocationDialog = false },
                 title = { Text("Set Location") },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Where did you spend the money?", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = useCurrentLocation, onCheckedChange = { useCurrentLocation = it })
-                            Text("Use current GPS location")
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (!useCurrentLocation) {
-                            OutlinedTextField(
-                                value = currentSearchQuery, onValueChange = { viewModel.onSearchQueryChanged(it) },
-                                label = { Text("Search shop (ex: Lidl, Mall...)") },
-                                modifier = Modifier.fillMaxWidth(), singleLine = true
+                        Text(
+                            "Where did you make this transaction?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // ── Option 1: GPS ────────────────────────────────────
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { locationMode = "gps" }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = locationMode == "gps",
+                                onClick  = { locationMode = "gps" },
+                                colors   = RadioButtonDefaults.colors(selectedColor = PrimaryGreen)
                             )
+                            Column(modifier = Modifier.padding(start = 4.dp)) {
+                                Text("Use my current GPS location",
+                                    style = MaterialTheme.typography.bodyMedium)
+                                Text("Precise – fetched on Save",
+                                    style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            }
+                        }
+
+                        // ── Option 2: Search ─────────────────────────────────
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { locationMode = "search" }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = locationMode == "search",
+                                onClick  = { locationMode = "search" },
+                                colors   = RadioButtonDefaults.colors(selectedColor = PrimaryGreen)
+                            )
+                            Text("Search for a place",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 4.dp))
+                        }
+
+                        if (locationMode == "search") {
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // ── "Search near me" vicinity toggle ─────────────
+                            Card(
+                                colors   = CardDefaults.cardColors(containerColor = LightMint),
+                                shape    = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = searchNearMe,
+                                        onCheckedChange = { wantNearby ->
+                                            searchNearMe = wantNearby
+                                            if (wantNearby) {
+                                                // Fetch GPS once to bias Photon – user opted in
+                                                isLoadingVicinity = true
+                                                scope.launch {
+                                                    val coords = locationHelper.getCurrentLocation()
+                                                    if (coords != null) {
+                                                        viewModel.updateLastLocation(coords.first, coords.second)
+                                                    }
+                                                    isLoadingVicinity = false
+                                                    // Re-trigger search with new coords
+                                                    if (currentSearchQuery.length >= 3) {
+                                                        viewModel.onSearchQueryChanged(currentSearchQuery + " ")
+                                                        viewModel.onSearchQueryChanged(currentSearchQuery)
+                                                    }
+                                                }
+                                            } else {
+                                                // Reset to global (0,0)
+                                                viewModel.updateLastLocation(0.0, 0.0)
+                                            }
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = PrimaryGreen)
+                                    )
+                                    if (isLoadingVicinity) {
+                                        CircularProgressIndicator(
+                                            modifier    = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color       = PrimaryGreen
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                    } else {
+                                        Icon(Icons.Default.LocationOn, null,
+                                            tint     = PrimaryGreen,
+                                            modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        if (searchNearMe) "Searching near your location"
+                                        else              "Search near me (uses GPS)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = PrimaryGreen
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value         = currentSearchQuery,
+                                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                                label         = { Text("Search shop (ex: Lidl, Mall...)") },
+                                modifier      = Modifier.fillMaxWidth(),
+                                singleLine    = true
+                            )
+
                             if (searchResults.isNotEmpty()) {
-                                Card(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 4.dp), elevation = CardDefaults.cardElevation(4.dp)) {
+                                Card(
+                                    modifier  = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 200.dp)
+                                        .padding(top = 4.dp),
+                                    elevation = CardDefaults.cardElevation(4.dp)
+                                ) {
                                     LazyColumn {
                                         items(searchResults) { spot ->
                                             ListItem(
                                                 headlineContent   = { Text(spot.name) },
-                                                supportingContent = { Text("${spot.city ?: ""} ${spot.street ?: ""}") },
+                                                supportingContent = {
+                                                    Text("${spot.city ?: ""} ${spot.street ?: ""}")
+                                                },
                                                 modifier = Modifier.clickable {
-                                                    lat = spot.latitude; lng = spot.longitude
+                                                    lat          = spot.latitude
+                                                    lng          = spot.longitude
                                                     locationName = spot.name
                                                     viewModel.onSearchQueryChanged(spot.name)
                                                     viewModel.clearLocationSearch()
@@ -702,32 +827,101 @@ fun ExpensesScreenWithFirebase(
                                     }
                                 }
                             }
-                        } else {
-                            Text("📍 Location will be set to your current coordinates.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+
+                            if (lat != 0.0 && locationName.isNotBlank()) {
+                                Text(
+                                    "📍 $locationName",
+                                    style    = MaterialTheme.typography.labelSmall,
+                                    color    = PrimaryGreen,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+
+                        // ── Option 3: Skip ───────────────────────────────────
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { locationMode = "skip" }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = locationMode == "skip",
+                                onClick  = { locationMode = "skip" },
+                                colors   = RadioButtonDefaults.colors(selectedColor = PrimaryGreen)
+                            )
+                            Column(modifier = Modifier.padding(start = 4.dp)) {
+                                Text("No location",
+                                    style = MaterialTheme.typography.bodyMedium)
+                                Text("Won't appear on heatmap",
+                                    style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            }
                         }
                     }
                 },
                 confirmButton = {
+                    // Disable Save while GPS/vicinity is loading, or if Search
+                    // is selected but no result has been tapped yet.
+                    val saveEnabled = !isFetchingGps && !isLoadingVicinity &&
+                            (locationMode != "search" || (lat != 0.0 && locationName.isNotBlank()))
+
                     Button(
+                        enabled = saveEnabled,
                         onClick = {
-                            saveTransaction(
-                                viewModel       = viewModel,
-                                selectedExpense = selectedExpense,
-                                name            = name,
-                                amountStr       = amount,
-                                category        = selectedCategoryName,
-                                isExpense       = isExpense,
-                                locationName    = if (useCurrentLocation) "Current Location" else locationName,
-                                lat             = lat, lng = lng
-                            )
-                            showLocationDialog = false; selectedExpense = null
-                            name = ""; amount = ""; selectedCategoryName = "General"
-                            viewModel.clearLocationSearch()
+                            scope.launch {
+                                when (locationMode) {
+                                    "gps" -> {
+                                        isFetchingGps = true
+                                        val coords = locationHelper.getCurrentLocation()
+                                        isFetchingGps = false
+                                        if (coords != null) {
+                                            lat          = coords.first
+                                            lng          = coords.second
+                                            locationName = "Current Location"
+                                            viewModel.updateLastLocation(lat, lng)
+                                        } else {
+                                            lat = 0.0; lng = 0.0; locationName = ""
+                                        }
+                                    }
+                                    "skip" -> { lat = 0.0; lng = 0.0; locationName = "" }
+                                    // "search": lat/lng/locationName already set by the row tap
+                                }
+                                saveTransaction(
+                                    viewModel       = viewModel,
+                                    selectedExpense = selectedExpense,
+                                    name            = name,
+                                    amountStr       = amount,
+                                    category        = selectedCategoryName,
+                                    isExpense       = isExpense,
+                                    locationName    = locationName,
+                                    lat             = lat,
+                                    lng             = lng
+                                )
+                                showLocationDialog = false
+                                selectedExpense    = null
+                                name = ""; amount = ""; selectedCategoryName = "General"
+                                viewModel.clearLocationSearch()
+                                // Reset vicinity bias so next transaction starts clean
+                                viewModel.updateLastLocation(0.0, 0.0)
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
-                    ) { Text("Finish & Save") }
+                    ) {
+                        if (isFetchingGps) {
+                            CircularProgressIndicator(
+                                color       = Color.White,
+                                modifier    = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text("Save")
+                    }
                 },
-                dismissButton = { TextButton(onClick = { showLocationDialog = false }) { Text("Back") } }
+                dismissButton = {
+                    TextButton(onClick = { showLocationDialog = false }) { Text("Back") }
+                }
             )
         }
 

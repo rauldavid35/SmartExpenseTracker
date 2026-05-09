@@ -106,7 +106,11 @@ fun HeatmapScreen(
 
     val locationStats = remember(expenses) {
         expenses
-            .filter { it.latitude != 0.0 && it.longitude != 0.0 }
+            .filter { tx ->
+                tx.amount < 0 &&              // expenses only — income excluded
+                        tx.latitude  != 0.0 &&        // must have real coordinates
+                        tx.longitude != 0.0           // lat=0/lng=0 means user skipped location
+            }
             .groupBy { it.locationName.ifBlank { "Unknown Location" } }
             .map { (name, list) ->
                 LocationStat(
