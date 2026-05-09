@@ -56,6 +56,13 @@ fun DrawerContentWithAuth(
 
             // ── Main navigation items ──────────────────────────────────────
             NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Person, null) },
+                label = { Text("Profile") },
+                selected = false,
+                onClick = { onNavigate("profile") },
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+            NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Home, null) },
                 label = { Text("Home") },
                 selected = false,
@@ -103,6 +110,13 @@ fun DrawerContentWithAuth(
                 colors = NavigationDrawerItemDefaults.colors(
                     unselectedContainerColor = LightMint
                 )
+            )
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Settings, null) },
+                label = { Text("Settings") },
+                selected = false,
+                onClick = { onNavigate("settings") },
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
             Spacer(Modifier.weight(1f))

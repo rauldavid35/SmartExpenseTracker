@@ -1,5 +1,7 @@
 package com.example.smartexpensetracker.ui.screens.home
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,16 +16,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.model.NoteData
+import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.ui.components.VoiceParseMode
-import com.example.smartexpensetracker.viewmodel.NotesViewModel
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.utils.VoiceParseResult
+import com.example.smartexpensetracker.viewmodel.NotesViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -32,18 +36,53 @@ import java.util.*
 @Composable
 fun HomeScreenWithFirebase(
     onMenuClick: () -> Unit,
-    viewModel: NotesViewModel = viewModel()
+    viewModel: NotesViewModel = viewModel(
+        factory = NotesViewModel.Factory(LocalContext.current)
+    )
 ) {
-    val notes by viewModel.notes.collectAsState()
+    val context   = LocalContext.current
+    val notes     by viewModel.notes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    var noteText by remember { mutableStateOf("") }
+    var noteText        by remember { mutableStateOf("") }
+    var reminderMillis  by remember { mutableStateOf<Long?>(null) }
     var showVoiceDialog by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-    var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
+    val scope           = rememberCoroutineScope()
+    val snackbarHost    = remember { SnackbarHostState() }
+    var voiceResult     by remember { mutableStateOf<VoiceParseResult?>(null) }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    // ── Date/time picker helpers ──────────────────────────────────────────────
+    fun openReminderPicker() {
+        val now = Calendar.getInstance()
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                TimePickerDialog(
+                    context,
+                    { _, hour, minute ->
+                        val cal = Calendar.getInstance().apply {
+                            set(year, month, day, hour, minute, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        reminderMillis = cal.timeInMillis
+                    },
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                    true
+                ).show()
+            },
+            now.get(Calendar.YEAR),
+            now.get(Calendar.MONTH),
+            now.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.minDate = System.currentTimeMillis()
+        }.show()
+    }
+
+    val reminderFmt = remember { SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()) }
+    val dateFmt     = remember { SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()) }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHost) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -51,13 +90,13 @@ fun HomeScreenWithFirebase(
                 .padding(padding)
         ) {
             item {
-                // Top Bar
+                // ── Top bar ───────────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = onMenuClick,
+                        onClick  = onMenuClick,
                         modifier = Modifier
                             .size(56.dp)
                             .clip(RoundedCornerShape(16.dp))
@@ -67,7 +106,7 @@ fun HomeScreenWithFirebase(
                     }
                 }
 
-                // Welcome Section
+                // ── Welcome ───────────────────────────────────────────────────
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -78,19 +117,22 @@ fun HomeScreenWithFirebase(
                     ) {
                         Icon(Icons.Default.AutoAwesome, "Welcome", tint = PrimaryGreen, modifier = Modifier.size(40.dp))
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(Modifier.height(16.dp))
                     Text("Welcome Back!", style = MaterialTheme.typography.headlineMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Let's keep track of your finances today", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Let's keep track of your finances today",
+                        style = MaterialTheme.typography.bodyLarge, color = TextSecondary
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(Modifier.height(32.dp))
 
-                // Notes Card
+                // ── Notes card ────────────────────────────────────────────────
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(20.dp),
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    colors    = CardDefaults.cardColors(containerColor = Color.White),
+                    shape     = RoundedCornerShape(20.dp),
                     elevation = CardDefaults.cardElevation(2.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
@@ -100,84 +142,130 @@ fun HomeScreenWithFirebase(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Notes", style = MaterialTheme.typography.titleLarge)
-                            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            if (isLoading) CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp), strokeWidth = 2.dp
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(Modifier.height(16.dp))
 
+                        // ── Input row ─────────────────────────────────────────
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
-                                value = noteText,
+                                value         = noteText,
                                 onValueChange = { noteText = it },
-                                placeholder = { Text("Add a note…", color = TextSecondary) },
-                                modifier = Modifier.weight(1f),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PrimaryGreen,
+                                placeholder   = { Text("Add a note…", color = TextSecondary) },
+                                modifier      = Modifier.weight(1f),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = PrimaryGreen,
                                     unfocusedBorderColor = Color.LightGray
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(Modifier.width(8.dp))
 
-                            // ── Voice button ──────────────────────────────────
+                            // Voice
                             IconButton(
-                                onClick = {
-                                    voiceParseResult = null
-                                    showVoiceDialog = true
-                                },
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(LightMint)
+                                onClick  = { voiceResult = null; showVoiceDialog = true },
+                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint)
                             ) {
                                 Icon(Icons.Default.Mic, "Voice Input", tint = PrimaryGreen)
                             }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(Modifier.width(8.dp))
 
+                            // Add
                             FloatingActionButton(
                                 onClick = {
                                     if (noteText.isNotBlank()) {
                                         scope.launch {
-                                            viewModel.addNote(noteText)
-                                            noteText = ""
-                                            snackbarHostState.showSnackbar("Note added")
+                                            viewModel.addNote(noteText, reminderMillis)
+                                            noteText       = ""
+                                            reminderMillis = null
+                                            snackbarHost.showSnackbar(
+                                                if (reminderMillis != null) "Note added with reminder" else "Note added"
+                                            )
                                         }
                                     }
                                 },
                                 containerColor = PrimaryGreen,
-                                modifier = Modifier.size(48.dp)
+                                modifier       = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Default.Add, "Add Note", tint = Color.White)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        // ── Reminder row ──────────────────────────────────────
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (reminderMillis != null) {
+                                Icon(
+                                    Icons.Default.Alarm, null,
+                                    tint     = PrimaryGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "Reminder: ${reminderFmt.format(Date(reminderMillis!!))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = PrimaryGreen,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick  = { reminderMillis = null },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = ::openReminderPicker,
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(Icons.Default.AddAlarm, null, tint = PrimaryGreen, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Set Reminder", style = MaterialTheme.typography.bodySmall, color = PrimaryGreen)
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
             }
 
             items(notes) { note ->
                 NoteItemFirebase(
-                    note = note,
+                    note     = note,
+                    dateFmt  = dateFmt,
+                    reminderFmt = reminderFmt,
                     onDelete = {
                         scope.launch {
                             viewModel.deleteNote(note.id)
-                            snackbarHostState.showSnackbar("Note deleted")
+                            snackbarHost.showSnackbar("Note deleted")
                         }
                     },
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             item {
                 if (notes.isEmpty() && !isLoading) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("No notes yet. Add your first note!", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No notes yet. Add your first note!",
+                            style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+                        )
                     }
                 }
             }
@@ -188,42 +276,37 @@ fun HomeScreenWithFirebase(
     if (showVoiceDialog) {
         VoiceInputDialog(
             mode        = VoiceParseMode.NOTE,
-            parseResult = voiceParseResult,
-            isParsing   = false, // Notes never need AI parsing
+            parseResult = voiceResult,
+            isParsing   = false,
             onTextReceived = { text ->
-                if (text.isNotBlank()) {
-                    voiceParseResult = VoiceParseResult.NoteResult(text)
-                } else {
-                    // text is blank → Retry was pressed → clear so Listening shows
-                    voiceParseResult = null
-                }
+                voiceResult = if (text.isNotBlank()) VoiceParseResult.NoteResult(text) else null
             },
             onResultConfirmed = { result ->
                 if (result is VoiceParseResult.NoteResult) {
-                    noteText = result.text
+                    noteText        = result.text
                     showVoiceDialog = false
-                    voiceParseResult = null
+                    voiceResult     = null
                 }
             },
-            onDismiss = {
-                showVoiceDialog = false
-                voiceParseResult = null
-            }
+            onDismiss = { showVoiceDialog = false; voiceResult = null }
         )
     }
 }
 
+// ── NoteItemFirebase ──────────────────────────────────────────────────────────
+
 @Composable
 fun NoteItemFirebase(
     note: NoteData,
+    dateFmt: SimpleDateFormat,
+    reminderFmt: SimpleDateFormat,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormat = remember { SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()) }
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(12.dp),
+        modifier  = modifier.fillMaxWidth(),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        shape     = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Row(
@@ -232,8 +315,28 @@ fun NoteItemFirebase(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(note.text, style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(dateFormat.format(Date(note.date)), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    dateFmt.format(Date(note.date)),
+                    style = MaterialTheme.typography.bodySmall, color = TextSecondary
+                )
+                if (note.remindAt != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Alarm, null,
+                            tint     = PrimaryGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            reminderFmt.format(Date(note.remindAt)),
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = PrimaryGreen,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, "Delete", tint = TextSecondary)

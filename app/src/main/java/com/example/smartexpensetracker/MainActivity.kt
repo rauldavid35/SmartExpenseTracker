@@ -8,12 +8,13 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.*
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.compose.runtime.*
 import com.example.smartexpensetracker.ui.navigation.MainApp
 import com.example.smartexpensetracker.ui.theme.SmartExpenseTrackerTheme
 import com.example.smartexpensetracker.utils.BiometricPromptManager
+import com.example.smartexpensetracker.utils.NotificationHelper
 import com.example.smartexpensetracker.utils.ShakeDetector
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
 import kotlinx.coroutines.Job
@@ -21,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+
     private val authViewModel: AuthViewModel by viewModels()
     private val biometricManager by lazy { BiometricPromptManager(this) }
 
@@ -33,10 +35,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Create notification channels as early as possible
+        NotificationHelper.createChannels(this)
+
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        shakeDetector = ShakeDetector {
-            triggerAction.intValue = 99
-        }
+        shakeDetector = ShakeDetector { triggerAction.intValue = 99 }
 
         handleIntent(intent)
 
@@ -52,8 +55,7 @@ class MainActivity : FragmentActivity() {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     if (volumeUpJob?.isActive == true) {
-                        volumeUpJob?.cancel()
-                        volumeUpJob = null
+                        volumeUpJob?.cancel(); volumeUpJob = null
                         triggerAction.intValue = 2
                     } else {
                         volumeUpJob = lifecycleScope.launch {
@@ -81,8 +83,8 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         intent?.getStringExtra("SHORTCUT_ACTION")?.let { action ->
             when (action) {
-                "voice_expense" -> triggerAction.intValue = 1
-                "voice_list" -> triggerAction.intValue = 2
+                "voice_expense"  -> triggerAction.intValue = 1
+                "voice_list"     -> triggerAction.intValue = 2
                 "camera_expense" -> triggerAction.intValue = 3
             }
         }

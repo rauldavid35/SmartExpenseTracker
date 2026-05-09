@@ -18,22 +18,24 @@ class NotesRepository {
         val subscription = getCollection(userId)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                // Original checked both error AND null snapshot
                 if (error != null || snapshot == null) return@addSnapshotListener
                 val notes = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(NoteData::class.java)?.copy(id = doc.id)
+                    // remindAt may be absent in older documents — treat missing as null
+                    val remindAt = doc.getLong("remindAt")
+                    doc.toObject(NoteData::class.java)?.copy(id = doc.id, remindAt = remindAt)
                 }
                 trySend(notes)
             }
         awaitClose { subscription.remove() }
     }
 
-    suspend fun addNote(userId: String, text: String) {
-        val note = NoteData(
-            text = text,
-            date = System.currentTimeMillis()
+    suspend fun addNote(userId: String, text: String, remindAt: Long? = null) {
+        val data = mutableMapOf<String, Any>(
+            "text" to text,
+            "date" to System.currentTimeMillis()
         )
-        getCollection(userId).add(note).await()
+        remindAt?.let { data["remindAt"] = it }
+        getCollection(userId).add(data).await()
     }
 
     suspend fun deleteNote(userId: String, noteId: String) {
