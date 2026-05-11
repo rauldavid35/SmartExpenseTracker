@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.ui.components.VoiceInputDialog
@@ -45,8 +46,10 @@ fun ListsScreenWithFirebase(
     var listToEdit by remember { mutableStateOf<ShoppingListData?>(null) }
     var showVoiceInput by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+
     // ── Voice state ───────────────────────────────────────────────────────────
-    val voiceParser = remember { VoiceParser(apiKey = "key") }
+    val voiceParser = remember { VoiceParser(context, apiKey = "key", preferOnline = false) }
     var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
     var isVoiceParsing   by remember { mutableStateOf(false) }
 

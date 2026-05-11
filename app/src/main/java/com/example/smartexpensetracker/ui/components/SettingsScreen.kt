@@ -20,6 +20,7 @@ import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.utils.NotificationHelper
 import com.example.smartexpensetracker.utils.UserPreferences
 import com.google.firebase.auth.FirebaseAuth
+import com.example.smartexpensetracker.ui.components.OfflineAiSettingsCard
 
 @Composable
 fun SettingsScreen(onMenuClick: () -> Unit) {
@@ -102,6 +103,13 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
                 checked  = darkMode,
                 onToggle = { prefs.setDarkMode(it) }
             )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ── Offline AI ────────────────────────────────────────────────────
+            SectionHeader("Offline AI")
+
+            OfflineAiSettingsCard()
         }
     }
 

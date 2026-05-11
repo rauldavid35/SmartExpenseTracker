@@ -1,5 +1,6 @@
 package com.example.smartexpensetracker.utils
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import com.example.smartexpensetracker.model.ProductResult
@@ -66,11 +67,19 @@ private fun storesFor(countryIso: String?): List<StoreTemplate> =
 private fun buildSearchUrl(template: String, productName: String): String =
     template.replace("{QUERY}", URLEncoder.encode(productName, "UTF-8"))
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GeminiReceiptParser
-// ─────────────────────────────────────────────────────────────────────────────
-
-class GeminiReceiptParser(private val apiKey: String) {
+/**
+ * GeminiReceiptParser — kept for product scanning (multimodal vision is out of
+ * reach for a 1.5B local model) and as the primary path for receipt parsing
+ * when online.
+ *
+ * For receipt PARSING (not product scan), we now delegate to LocalLlmParser
+ * if Gemini fails or [forceLocal] is true.
+ */
+class GeminiReceiptParser(
+    apiKey: String,
+    private val context: Context,
+    private val forceLocal: Boolean = false,
+) {
 
     private val safetySettings = listOf(
         SafetySetting(HarmCategory.HARASSMENT,        BlockThreshold.NONE),
@@ -79,15 +88,38 @@ class GeminiReceiptParser(private val apiKey: String) {
         SafetySetting(HarmCategory.DANGEROUS_CONTENT, BlockThreshold.NONE)
     )
 
-    private val generativeModel = GenerativeModel(
+    private val hasKey = apiKey.isNotBlank()
+
+    private val generativeModel = if (hasKey) GenerativeModel(
         modelName      = "gemini-2.5-flash",
         apiKey         = apiKey,
         safetySettings = safetySettings
-    )
+    ) else null
 
-    // ── Receipt parsing ───────────────────────────────────────────────────────
+    private val localParser by lazy { LocalLlmParser(context) }
+
+    // ── Receipt parsing — Gemini first, local fallback ────────────────────────
 
     suspend fun parseReceiptText(rawText: String): ReceiptResult? {
+        if (forceLocal) return localParser.parseReceiptText(rawText)
+
+        // Try Gemini if we have a key
+        if (generativeModel != null) {
+            val geminiResult = tryGeminiReceipt(rawText)
+            if (geminiResult != null) return geminiResult
+            Log.i("GeminiReceipt", "Gemini failed, attempting local LLM fallback")
+        }
+
+        // Fall back to local LLM if model is downloaded
+        if (localParser.isReady()) {
+            return localParser.parseReceiptText(rawText)
+        }
+        Log.w("GeminiReceipt", "Both Gemini and local LLM unavailable")
+        return null
+    }
+
+    private suspend fun tryGeminiReceipt(rawText: String): ReceiptResult? {
+        val g = generativeModel ?: return null
         return withContext(Dispatchers.IO) {
             try {
                 val prompt = """
@@ -127,7 +159,7 @@ class GeminiReceiptParser(private val apiKey: String) {
                     ---
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = g.generateContent(prompt)
                 parseReceiptResponse(response.text ?: "")
             } catch (e: Exception) {
                 Log.e("GeminiAI", "Receipt parsing failed: ${e.message}")
@@ -136,13 +168,17 @@ class GeminiReceiptParser(private val apiKey: String) {
         }
     }
 
-    // ── Product identification — location-aware ───────────────────────────────
+    // ── Product identification — Gemini ONLY (vision required) ────────────────
 
     suspend fun identifyProduct(
         image: Bitmap,
         countryIso: String?,
         currency: String = "USD"
     ): ProductResult? {
+        val g = generativeModel ?: run {
+            Log.w("GeminiAI", "identifyProduct called without Gemini key — cannot run offline")
+            return null
+        }
         return withContext(Dispatchers.IO) {
             try {
                 val stores    = storesFor(countryIso)
@@ -188,7 +224,7 @@ class GeminiReceiptParser(private val apiKey: String) {
                     text(prompt)
                 }
 
-                val response = generativeModel.generateContent(inputContent)
+                val response = g.generateContent(inputContent)
                 parseProductResponse(response.text ?: "", countryIso, stores, currency)
 
             } catch (e: Exception) {

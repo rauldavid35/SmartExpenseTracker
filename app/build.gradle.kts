@@ -15,6 +15,41 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        // ── Native build for llama.cpp ────────────────────────────────────────
+        externalNativeBuild {
+            cmake {
+                cppFlags("-std=c++17 -O3")
+                arguments("-DANDROID_STL=c++_shared")
+            }
+        }
+
+        // 64-bit only — Qwen 1.5B can't realistically run on 32-bit phones
+        // and dropping x86/armeabi-v7a halves APK size.
+        ndk {
+            abiFilters.add("arm64-v8a")
+            // abiFilters.add("x86_64")  // uncomment for emulator support
+        }
+    }
+
+    // ── CMake source location ────────────────────────────────────────────────
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    // ── NDK version ──────────────────────────────────────────────────────────
+    ndkVersion = "26.1.10909125"  // any 26.x works; pin so CI is reproducible
+
+    // ── Avoid duplicate libc++_shared.so ─────────────────────────────────────
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            // Pick the first c++_shared.so found rather than failing the build
+            pickFirsts += setOf("**/libc++_shared.so")
+        }
     }
 
     buildFeatures {
@@ -79,7 +114,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Gemini AI
+    // Gemini AI (kept for online path + product scan)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 
     // Fingerprint/Face ID
@@ -88,11 +123,11 @@ dependencies {
     // Location (GPS)
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
-    // --- OPEN STREET MAP (Replaces Google Maps) ---
+    // OpenStreetMap
     implementation("org.osmdroid:osmdroid-android:6.1.18")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")  // also used by ModelDownloader
 
-    //  Export formats
+    // Export formats
     implementation("org.apache.poi:poi-ooxml:5.2.5")
     implementation("org.apache.poi:poi-ooxml-lite:5.2.5")
     implementation("org.apache.xmlbeans:xmlbeans:5.1.1")

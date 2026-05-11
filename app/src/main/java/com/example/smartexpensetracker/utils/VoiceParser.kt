@@ -1,5 +1,6 @@
 package com.example.smartexpensetracker.utils
 
+import android.content.Context
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.BlockThreshold
@@ -32,13 +33,38 @@ sealed class VoiceParseResult {
     }
 }
 
-class VoiceParser(apiKey: String) {
+/**
+ * VoiceParser — three-tier fallback chain:
+ *
+ *   1. Gemini cloud (best quality) — used when [preferOnline] is true AND we have
+ *      an API key. Skipped silently on failure (network, quota, rate limit).
+ *   2. Local LLM (Qwen 1.5B on-device) — used when the model is downloaded.
+ *      Much better than regex on natural-language variation; slower than Gemini.
+ *   3. Regex (always available) — final fallback, never fails but limited.
+ *
+ * The order can be flipped via [preferOnline]: set false to prefer the local
+ * model (privacy mode / data-saver mode) and only fall back to Gemini if the
+ * local model fails.
+ *
+ * Construction takes a Context now so we can build the LocalLlmParser. The
+ * apiKey can be empty — Gemini is just skipped in that case.
+ */
+class VoiceParser(
+    context: Context,
+    apiKey: String,
+    private val preferOnline: Boolean = true,
+) {
 
     companion object {
         const val STT_LOCALE = "en-US"
+        private const val TAG = "VoiceParser"
     }
 
-    private val model = GenerativeModel(
+    private val appContext = context.applicationContext
+    private val localParser = LocalLlmParser(appContext)
+    private val hasGeminiKey = apiKey.isNotBlank()
+
+    private val gemini = if (hasGeminiKey) GenerativeModel(
         modelName = "gemini-2.5-flash",
         apiKey = apiKey,
         safetySettings = listOf(
@@ -47,16 +73,51 @@ class VoiceParser(apiKey: String) {
             SafetySetting(HarmCategory.SEXUALLY_EXPLICIT, BlockThreshold.NONE),
             SafetySetting(HarmCategory.DANGEROUS_CONTENT, BlockThreshold.NONE)
         )
-    )
+    ) else null
 
     fun parseNote(transcript: String): VoiceParseResult.NoteResult =
         VoiceParseResult.NoteResult(transcript.trim())
+
+    // ── Expenses ──────────────────────────────────────────────────────────────
 
     suspend fun parseExpense(
         transcript: String,
         knownCategories: List<String> = emptyList()
     ): VoiceParseResult.ExpenseResult = withContext(Dispatchers.IO) {
-        try {
+
+        // Build the chain based on preferences
+        val chain: List<suspend () -> VoiceParseResult.ExpenseResult?> = if (preferOnline) {
+            listOf(
+                { tryGeminiExpense(transcript, knownCategories) },
+                { tryLocalExpense(transcript, knownCategories) },
+                { offlineParseExpense(transcript, knownCategories) }
+            )
+        } else {
+            listOf(
+                { tryLocalExpense(transcript, knownCategories) },
+                { tryGeminiExpense(transcript, knownCategories) },
+                { offlineParseExpense(transcript, knownCategories) }
+            )
+        }
+
+        for ((idx, step) in chain.withIndex()) {
+            val result = step.invoke()
+            if (result != null) {
+                Log.d(TAG, "parseExpense: tier $idx succeeded")
+                return@withContext result
+            }
+        }
+        // Regex always returns non-null, so this path is theoretically unreachable.
+        // Kept as a defensive last resort.
+        offlineParseExpense(transcript, knownCategories)
+    }
+
+    private suspend fun tryGeminiExpense(
+        transcript: String,
+        knownCategories: List<String>
+    ): VoiceParseResult.ExpenseResult? {
+        val g = gemini ?: return null
+        return try {
             val categoryHint = if (knownCategories.isNotEmpty())
                 "Known categories (pick closest or null): ${knownCategories.joinToString()}"
             else ""
@@ -80,19 +141,56 @@ class VoiceParser(apiKey: String) {
                 Transcript: "$transcript"
             """.trimIndent()
 
-            val response = model.generateContent(prompt)
+            val response = g.generateContent(prompt)
             parseExpenseJson(response.text ?: "", VoiceParseResult.ExpenseResult.Confidence.HIGH)
-                ?: offlineParseExpense(transcript, knownCategories)
         } catch (e: Exception) {
-            Log.w("VoiceParser", "Gemini expense parse failed, using offline fallback: ${e.message}")
-            offlineParseExpense(transcript, knownCategories)
+            Log.w(TAG, "Gemini expense parse failed: ${e.message}")
+            null
         }
     }
+
+    private suspend fun tryLocalExpense(
+        transcript: String,
+        knownCategories: List<String>
+    ): VoiceParseResult.ExpenseResult? = if (localParser.isReady())
+        localParser.parseExpense(transcript, knownCategories)
+    else null
+
+    // ── Shopping lists ────────────────────────────────────────────────────────
 
     suspend fun parseShoppingList(
         transcript: String
     ): VoiceParseResult.ShoppingListResult = withContext(Dispatchers.IO) {
-        try {
+
+        val chain: List<suspend () -> VoiceParseResult.ShoppingListResult?> = if (preferOnline) {
+            listOf(
+                { tryGeminiList(transcript) },
+                { if (localParser.isReady()) localParser.parseShoppingList(transcript) else null },
+                { offlineParseShoppingList(transcript) }
+            )
+        } else {
+            listOf(
+                { if (localParser.isReady()) localParser.parseShoppingList(transcript) else null },
+                { tryGeminiList(transcript) },
+                { offlineParseShoppingList(transcript) }
+            )
+        }
+
+        for ((idx, step) in chain.withIndex()) {
+            val result = step.invoke()
+            if (result != null) {
+                Log.d(TAG, "parseShoppingList: tier $idx succeeded")
+                return@withContext result
+            }
+        }
+        offlineParseShoppingList(transcript)
+    }
+
+    private suspend fun tryGeminiList(
+        transcript: String
+    ): VoiceParseResult.ShoppingListResult? {
+        val g = gemini ?: return null
+        return try {
             val prompt = """
                 LANGUAGE RULE: You MUST respond only in English. All field values must be in English.
 
@@ -112,18 +210,15 @@ class VoiceParser(apiKey: String) {
                 Transcript: "$transcript"
             """.trimIndent()
 
-            val response = model.generateContent(prompt)
-            parseShoppingListJson(
-                response.text ?: "",
-                VoiceParseResult.ShoppingListResult.Confidence.HIGH
-            ) ?: offlineParseShoppingList(transcript)
+            val response = g.generateContent(prompt)
+            parseShoppingListJson(response.text ?: "", VoiceParseResult.ShoppingListResult.Confidence.HIGH)
         } catch (e: Exception) {
-            Log.w("VoiceParser", "Gemini list parse failed, using offline fallback: ${e.message}")
-            offlineParseShoppingList(transcript)
+            Log.w(TAG, "Gemini list parse failed: ${e.message}")
+            null
         }
     }
 
-    // ── Offline: Expenses ─────────────────────────────────────────────────────
+    // ── Offline regex fallbacks (unchanged from original) ─────────────────────
 
     internal fun offlineParseExpense(
         transcript: String,
@@ -170,7 +265,6 @@ class VoiceParser(apiKey: String) {
         val fromUser = known.firstOrNull { normalized.contains(it.lowercase()) }
         if (fromUser != null) return fromUser
 
-        // English-only keyword map (matches the new English default categories)
         val keywordMap = mapOf(
             "Food"          to listOf("food", "restaurant", "burger", "pizza", "sushi",
                 "groceries", "grocery", "supermarket", "coffee", "cafe",
@@ -195,9 +289,6 @@ class VoiceParser(apiKey: String) {
     internal fun offlineParseShoppingList(
         transcript: String
     ): VoiceParseResult.ShoppingListResult {
-
-        // ── Step 1: strip leading command words ───────────────────────────────
-        // "add a", "create my", "make a new", "please add", etc.
         val commandPrefix = Regex(
             """^(?:please\s+)?(?:add|create|make|start|new|open|build)(?:\s+(?:a|an|the|my|new))?\s+""",
             RegexOption.IGNORE_CASE
@@ -206,22 +297,14 @@ class VoiceParser(apiKey: String) {
 
         var listName: String? = null
 
-        // ── Step 2: detect an explicit list name ──────────────────────────────
-
-        // Pattern A: "Weekend list: milk bread" / "Weekend list with milk"
-        // Negative lookahead ensures we don't capture "list" inside the name group
         val listKeyword = Regex(
             """^((?:(?!list\b)[\w\sÀ-žÁ-ź])+?)\s+list\s*(?::|with|of|for|and)?\s+(.+)""",
             RegexOption.IGNORE_CASE
         )
-
-        // Pattern B: "lista cumparaturi: milk bread"
         val listaPattern = Regex(
             """^lista\s+([\w\sÀ-žÁ-ź]{1,30}?)\s*[:\-]?\s*(.+)""",
             RegexOption.IGNORE_CASE
         )
-
-        // Pattern C: "Pharmacy: aspirin vitamins" (explicit colon separator)
         val colonPattern = Regex(
             """^([A-Z][A-Za-zÀ-žÁ-ź\s]{1,25}):\s*(.+)"""
         )
@@ -239,12 +322,8 @@ class VoiceParser(apiKey: String) {
             }
         }
 
-        // No strong signal → safe default, keep ALL words as items
         if (listName == null) listName = "Shopping List"
 
-        // ── Step 3: split remaining text into items ───────────────────────────
-
-        // Primary delimiters: comma and explicit conjunctions
         val explicitDelimiter = Regex(
             """(?i)\s*,\s*|\s+(?:and|then|also|plus|with|si|și|cu)\s+"""
         )
@@ -252,8 +331,6 @@ class VoiceParser(apiKey: String) {
             .map { it.trim().replaceFirstChar { c -> c.uppercase() } }
             .filter { it.isNotBlank() && it.length > 1 }
 
-        // Fallback: if still 0 or 1 item, split on every space
-        // Handles "milk bread eggs" (natural pauses → STT outputs space-separated words)
         if (rawItems.size <= 1 && working.contains(' ')) {
             rawItems = working.split(Regex("""\s+"""))
                 .map { it.trim().replaceFirstChar { c -> c.uppercase() } }

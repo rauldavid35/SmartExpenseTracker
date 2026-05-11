@@ -1,6 +1,8 @@
+# ─── Android Studio / IntelliJ ───────────────────────────────────────────────
 *.iml
 .gradle
 /local.properties
+local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -10,6 +12,44 @@
 .DS_Store
 /build
 /captures
+
+# ─── Native build (existing entries — kept) ──────────────────────────────────
 .externalNativeBuild
 .cxx
-local.properties
+
+# ─── Firebase secrets ────────────────────────────────────────────────────────
+google-services.json
+
+# ─── llama.cpp integration ───────────────────────────────────────────────────
+
+# CMake build outputs at any depth
+app/.cxx/
+app/build/
+**/.cxx/
+
+# llama.cpp source pulled in via FetchContent during the build.
+# These directories are recreated on every clean build — never commit them.
+**/_deps/llama-src/
+**/_deps/llama-build/
+**/_deps/llama-subbuild/
+
+# Compiled native libraries (rebuilt per ABI per build)
+**/jniLibs/**/*.so
+app/src/main/jniLibs/
+
+# ─── On-device model files ───────────────────────────────────────────────────
+
+# GGUF model weights — never commit, these are gigabytes
+*.gguf
+*.bin
+
+# If you ever copy a model to assets/ or raw/ for testing, ignore it
+app/src/main/assets/models/
+app/src/main/res/raw/*.gguf
+
+# ─── Native toolchain noise ──────────────────────────────────────────────────
+
+*.o
+*.obj
+CMakeCache.txt
+CMake

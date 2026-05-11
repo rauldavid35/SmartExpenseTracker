@@ -78,9 +78,9 @@ fun ExpensesScreenWithFirebase(
     val availableCategories  by viewModel.categories.collectAsState()
     val isLoading            by viewModel.isLoading.collectAsState()
 
-    val geminiParser  = remember { GeminiReceiptParser("key") }
+    val geminiParser  = remember { GeminiReceiptParser("key",context) }
     val locationHelper = remember { LocationHelper(context) }
-    val voiceParser   = remember { VoiceParser(apiKey = "key") }
+    val voiceParser = remember { VoiceParser(context, apiKey = "key", preferOnline = false) }
 
     val cameraPermission   = rememberPermissionState(Manifest.permission.CAMERA)
     val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
