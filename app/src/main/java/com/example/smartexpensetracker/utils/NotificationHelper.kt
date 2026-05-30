@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.smartexpensetracker.MainActivity
 import com.example.smartexpensetracker.R
@@ -55,7 +56,17 @@ object NotificationHelper {
         )
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         // Use setExactAndAllowWhileIdle so it fires even in Doze mode
-        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (am.canScheduleExactAlarms()) {
+                am.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+            } else {
+                am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+            }
+        } else {
+            am.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        }
     }
 
     fun cancelNoteReminder(context: Context, noteId: Int) {

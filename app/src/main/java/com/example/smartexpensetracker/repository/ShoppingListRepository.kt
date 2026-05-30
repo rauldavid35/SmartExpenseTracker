@@ -47,6 +47,10 @@ class ShoppingListRepository {
     }
 
     suspend fun deleteList(userId: String, listId: String) {
+        val items = getItemsCollection(userId, listId).get().await()
+        items.documents.forEach { doc ->
+            doc.reference.delete().await()
+        }
         getListsCollection(userId).document(listId).delete().await()
     }
 

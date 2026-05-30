@@ -50,7 +50,6 @@ class NotesViewModel(private val context: Context) : ViewModel() {
 
     fun deleteNote(noteId: String) {
         val userId = auth.currentUser?.uid ?: return
-        // Cancel any pending reminder for this note
         val note = _notes.value.find { it.id == noteId }
         if (note?.remindAt != null) {
             val alarmId = (note.text + note.remindAt).hashCode().and(0x7FFFFFFF)

@@ -20,7 +20,6 @@ class NotesRepository {
             .addSnapshotListener { snapshot, error ->
                 if (error != null || snapshot == null) return@addSnapshotListener
                 val notes = snapshot.documents.mapNotNull { doc ->
-                    // remindAt may be absent in older documents — treat missing as null
                     val remindAt = doc.getLong("remindAt")
                     doc.toObject(NoteData::class.java)?.copy(id = doc.id, remindAt = remindAt)
                 }
