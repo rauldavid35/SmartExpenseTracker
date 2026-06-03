@@ -112,6 +112,7 @@ fun ExpensesScreenWithFirebase(
     // ── Form data ─────────────────────────────────────────────────────────────
     var name                 by remember { mutableStateOf("") }
     var amount               by remember { mutableStateOf("") }
+    var scannedItems by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var selectedCategoryName by remember { mutableStateOf("None") }
     var isExpense            by remember { mutableStateOf(true) }
     var scannedRawText       by remember { mutableStateOf("") }
@@ -183,7 +184,7 @@ fun ExpensesScreenWithFirebase(
                 scope             = scope,
                 countryIso        = resolvedCountryIso,
                 onLoading         = { /* already set above */ },
-                onReceiptComplete = { _, _, _, _ -> },  // not used in product mode
+                onReceiptComplete = { _, _, _, _, _ -> },  // not used in product mode
                 onProductComplete = { result ->
                     isProcessingAI = false
                     if (result != null) {
@@ -222,11 +223,11 @@ fun ExpensesScreenWithFirebase(
                 scope             = scope,
                 countryIso        = null,
                 onLoading         = { isProcessingAI = true },
-                onReceiptComplete = { merchant, address, total, raw ->
+                onReceiptComplete = { merchant, address, total, raw, items ->
                     isProcessingAI = false
                     if (merchant != null) {
                         name = merchant; detectedAddress = address ?: ""
-                        amount = total?.toString() ?: ""; showAddDialog = true
+                        amount = total?.toString() ?: ""; scannedItems = items; showAddDialog = true
                     } else { scannedRawText = raw; showScannedTextDialog = true }
                 },
                 onProductComplete = {}
@@ -281,6 +282,7 @@ fun ExpensesScreenWithFirebase(
                             selectedExpense = null; name = ""; amount = ""
                             selectedCategoryName = availableCategories.firstOrNull() ?: "None"
                             isExpense = true; detectedAddress = ""; showAddDialog = true
+                            scannedItems = emptyList()
                         },
                         containerColor = PrimaryGreen,
                         modifier       = Modifier.size(48.dp)
@@ -416,7 +418,7 @@ fun ExpensesScreenWithFirebase(
         // Add / Edit expense form
         if (showAddDialog) {
             AlertDialog(
-                onDismissRequest = { showAddDialog = false; selectedExpense = null },
+                onDismissRequest = { showAddDialog = false; selectedExpense = null; scannedItems = emptyList() },
                 title = { Text(if (isEditing) "Edit Transaction" else "Add Transaction") },
                 text = {
                     Column {
@@ -434,6 +436,40 @@ fun ExpensesScreenWithFirebase(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         // ── Expense / Income toggle ───────────────────────────────────
+
+                        if (scannedItems.isNotEmpty()) {
+                            Text(
+                                "Detected Items",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = PrimaryGreen
+                            )
+                            Card( // Am adăugat un mic Card pentru a arăta mai curat (opțional)
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    scannedItems.forEach { (itemName, itemPrice) ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                itemName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                String.format("%.2f", itemPrice),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = PrimaryGreen
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = isExpense,
@@ -662,7 +698,7 @@ fun ExpensesScreenWithFirebase(
                         ) { Text("Next") }
                     }
                 },
-                dismissButton = { TextButton(onClick = { showAddDialog = false; selectedExpense = null }) { Text("Cancel") } }
+                dismissButton = { TextButton(onClick = { showAddDialog = false; selectedExpense = null; scannedItems = emptyList() }) { Text("Cancel") } }
             )
         }
 
@@ -1028,11 +1064,11 @@ fun ExpensesScreenWithFirebase(
                                                 scope             = scope,
                                                 countryIso        = null,
                                                 onLoading         = { isProcessingAI = true },
-                                                onReceiptComplete = { merchant, address, total, raw ->
+                                                onReceiptComplete = { merchant, address, total, raw, items ->
                                                     isProcessingAI = false
                                                     if (merchant != null) {
                                                         name = merchant; detectedAddress = address ?: ""
-                                                        amount = total?.toString() ?: ""; showAddDialog = true
+                                                        amount = total?.toString() ?: ""; scannedItems = items; showAddDialog = true
                                                     } else { scannedRawText = raw; showScannedTextDialog = true }
                                                 },
                                                 onProductComplete = {}
@@ -1110,7 +1146,7 @@ fun processImage(
     scope: CoroutineScope,
     countryIso: String?,
     onLoading: () -> Unit,
-    onReceiptComplete: (String?, String?, Double?, String) -> Unit,
+    onReceiptComplete: (String?, String?, Double?, String, List<Pair<String, Double>>) -> Unit,
     onProductComplete: (ProductResult?) -> Unit
 ) {
     onLoading()
@@ -1123,12 +1159,12 @@ fun processImage(
                 .addOnSuccessListener { visionText ->
                     scope.launch {
                         val result = geminiParser.parseReceiptText(visionText.text)
-                        if (result != null) onReceiptComplete(result.merchant, result.address, result.total, visionText.text)
-                        else onReceiptComplete(null, null, null, visionText.text)
+                        if (result != null) onReceiptComplete(result.merchant, result.address, result.total, visionText.text, result.items)
+                        else onReceiptComplete(null, null, null, visionText.text, emptyList())
                     }
                 }
-                .addOnFailureListener { onReceiptComplete(null, null, null, "OCR Failed") }
-        } catch (e: IOException) { onReceiptComplete(null, null, null, "Error") }
+                .addOnFailureListener { onReceiptComplete(null, null, null, "OCR Failed", emptyList()) }
+        } catch (e: IOException) { onReceiptComplete(null, null, null, "Error", emptyList()) }
 
     } else {
         scope.launch {
