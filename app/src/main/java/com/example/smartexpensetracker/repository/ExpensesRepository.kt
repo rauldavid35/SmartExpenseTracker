@@ -15,7 +15,11 @@ class ExpensesRepository {
 
     fun getExpenses(userId: String): Flow<List<ExpenseTransaction>> = callbackFlow {
         val subscription = getCollection(userId)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
                 if (snapshot != null) {
                     val list = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(ExpenseTransaction::class.java)?.copy(id = doc.id)

@@ -19,18 +19,30 @@ class ListsViewModel : ViewModel() {
     val shoppingLists: StateFlow<List<ShoppingListData>> = _shoppingLists.asStateFlow()
 
     private val _currentListItems = MutableStateFlow<List<ShoppingItem>>(emptyList())
+
+    private var currentListJob: kotlinx.coroutines.Job? = null
     val currentListItems: StateFlow<List<ShoppingItem>> = _currentListItems.asStateFlow()
 
     init {
-        fetchLists()
+        auth.addAuthStateListener { firebaseAuth ->
+            val uid = firebaseAuth.currentUser?.uid
+            if (uid == null) {
+                _shoppingLists.value = emptyList()
+                _currentListItems.value = emptyList()
+            } else {
+                fetchLists()
+            }
+        }
     }
 
     private fun fetchLists() {
         val userId = auth.currentUser?.uid ?: return
         viewModelScope.launch {
-            repository.getLists(userId).collect { lists ->
-                _shoppingLists.value = lists
-            }
+            try {
+                repository.getLists(userId).collect { lists ->
+                    _shoppingLists.value = lists
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -58,11 +70,14 @@ class ListsViewModel : ViewModel() {
 
     fun fetchListItems(listId: String) {
         val userId = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            repository.getItems(userId, listId).collect { items ->
-                _currentListItems.value = items
-                repository.updateItemCount(userId, listId, items.size)
-            }
+        currentListJob?.cancel()
+        currentListJob = viewModelScope.launch {
+            try {
+                repository.getItems(userId, listId).collect { items ->
+                    _currentListItems.value = items
+                    repository.updateItemCount(userId, listId, items.size)
+                }
+            } catch (_: Exception) {}
         }
     }
 

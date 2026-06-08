@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 // ─── Export options ────────────────────────────────────────────────────────────
 
@@ -51,6 +54,9 @@ class BudgetViewModel(
 
     private val _expenses        = MutableStateFlow<List<ExpenseTransaction>>(emptyList())
     private val _budgetConfig    = MutableStateFlow<MonthlyBudget?>(null)
+
+    private val _exportIntent = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+    val exportIntent = _exportIntent.asSharedFlow()
     private val _categorySettings = MutableStateFlow<List<BudgetCategorySetting>>(emptyList())
     private val _isLoading       = MutableStateFlow(true)
 
@@ -125,19 +131,27 @@ class BudgetViewModel(
         dashboardRepository = DashboardRepository(context, userId)
 
         viewModelScope.launch {
-            dashboardRepository.dashboards.collect { _dashboards.value = it }
+            try {
+                dashboardRepository.dashboards.collect { _dashboards.value = it }
+            } catch (_: Exception) {}
         }
         viewModelScope.launch {
-            expensesRepository.getExpenses(userId).collect { _expenses.value = it }
+            try {
+                expensesRepository.getExpenses(userId).collect { _expenses.value = it }
+            } catch (_: Exception) {}
         }
         viewModelScope.launch {
-            budgetRepository.getMonthlyBudget(userId).collect {
-                _budgetConfig.value = it
-                _isLoading.value    = false
-            }
+            try {
+                budgetRepository.getMonthlyBudget(userId).collect {
+                    _budgetConfig.value = it
+                    _isLoading.value    = false
+                }
+            } catch (_: Exception) { _isLoading.value = false }
         }
         viewModelScope.launch {
-            budgetRepository.getCategorySettingsFlow(userId).collect { _categorySettings.value = it }
+            try {
+                budgetRepository.getCategorySettingsFlow(userId).collect { _categorySettings.value = it }
+            } catch (_: Exception) {}
         }
     }
 
@@ -191,46 +205,50 @@ class BudgetViewModel(
         context: Context,
         format: ExportFormat,
         scope: ExportScope
-    ): Intent {
+    ) {
         val state = uiState.value
         val exp   = expenses.value
         val dash  = dashboards.value
 
-        val fileName: String; val mime: String; val file: File
+        viewModelScope.launch(Dispatchers.IO) {
+            val fileName: String; val mime: String; val file: File
 
-        when (format) {
-            ExportFormat.XLSX -> {
-                fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.xlsx"
-                mime     = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                file     = File(context.cacheDir, fileName)
-                    .also { it.writeBytes(ExportRepository.buildXlsx(exp, state, dash, scope)) }
-            }
-            ExportFormat.PDF -> {
-                fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.pdf"
-                mime     = "application/pdf"
-                file     = File(context.cacheDir, fileName)
-                    .also { it.writeBytes(ExportRepository.buildPdf(exp, state, dash, scope)) }
-            }
-            else -> {
-                val (content, ext, m) = when (format) {
-                    ExportFormat.CSV  -> Triple(buildCsv(scope, exp, state, dash),  "csv",  "text/csv")
-                    ExportFormat.JSON -> Triple(buildJson(scope, exp, state, dash), "json", "application/json")
-                    ExportFormat.XML  -> Triple(buildXml(scope, exp, state),        "xml",  "application/xml")
-                    else -> throw IllegalStateException()
+            when (format) {
+                ExportFormat.XLSX -> {
+                    fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.xlsx"
+                    mime     = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    file     = File(context.cacheDir, fileName)
+                        .also { it.writeBytes(ExportRepository.buildXlsx(exp, state, dash, scope)) }
                 }
-                fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.$ext"
-                mime = m
-                file = File(context.cacheDir, fileName).also { it.writeText(content) }
+                ExportFormat.PDF -> {
+                    fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.pdf"
+                    mime     = "application/pdf"
+                    file     = File(context.cacheDir, fileName)
+                        .also { it.writeBytes(ExportRepository.buildPdf(exp, state, dash, scope)) }
+                }
+                else -> {
+                    val (content, ext, m) = when (format) {
+                        ExportFormat.CSV  -> Triple(buildCsv(scope, exp, state, dash),  "csv",  "text/csv")
+                        ExportFormat.JSON -> Triple(buildJson(scope, exp, state, dash), "json", "application/json")
+                        ExportFormat.XML  -> Triple(buildXml(scope, exp, state),        "xml",  "application/xml")
+                        else -> throw IllegalStateException()
+                    }
+                    fileName = "smart_expense_${scope.name.lowercase()}_${System.currentTimeMillis()}.$ext"
+                    mime = m
+                    file = File(context.cacheDir, fileName).also { it.writeText(content) }
+                }
             }
-        }
 
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-        return Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Smart Expense Tracker – Export")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }.let { Intent.createChooser(it, "Share export via…") }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Smart Expense Tracker – Export")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }.let { Intent.createChooser(it, "Share export via…") }
+
+            _exportIntent.emit(intent)
+        }
     }
 
     private fun buildCsv(

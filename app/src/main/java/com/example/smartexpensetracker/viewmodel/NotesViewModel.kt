@@ -24,14 +24,27 @@ class NotesViewModel(private val context: Context) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    init { fetchNotes() }
+    init {
+        auth.addAuthStateListener { firebaseAuth ->
+            val uid = firebaseAuth.currentUser?.uid
+            if (uid == null) {
+                _notes.value = emptyList()
+            } else {
+                fetchNotes()
+            }
+        }
+    }
 
     private fun fetchNotes() {
         val userId = auth.currentUser?.uid ?: return
         _isLoading.value = true
         viewModelScope.launch {
-            repository.getNotes(userId).collect { notes ->
-                _notes.value    = notes
+            try {
+                repository.getNotes(userId).collect { notes ->
+                    _notes.value    = notes
+                    _isLoading.value = false
+                }
+            } catch (_: Exception) {
                 _isLoading.value = false
             }
         }

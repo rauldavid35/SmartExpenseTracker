@@ -52,8 +52,12 @@ class ExpensesViewModel : ViewModel() {
         val userId = auth.currentUser?.uid ?: return
         _isLoading.value = true
         viewModelScope.launch {
-            expensesRepository.getExpenses(userId).collect { list ->
-                _expenses.value = list
+            try {
+                expensesRepository.getExpenses(userId).collect { list ->
+                    _expenses.value = list
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
                 _isLoading.value = false
             }
         }

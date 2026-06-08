@@ -88,6 +88,12 @@ fun ExpensesScreenWithFirebase(
     val imageCapture   = remember { ImageCapture.Builder().build() }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
+
     // ── Standard UI state ─────────────────────────────────────────────────────
     var showAddDialog        by remember { mutableStateOf(false) }
     var showLocationDialog   by remember { mutableStateOf(false) }
@@ -676,12 +682,23 @@ fun ExpensesScreenWithFirebase(
                         Button(
                             onClick = {
                                 scope.launch {
+
+                                    val amountVal = amount.toDoubleOrNull() ?: 0.0
+                                    if (name.isBlank() || amountVal <= 0.0 || selectedCategoryName == "None" || selectedCategoryName.isBlank()) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Please fill in name, amount, and category",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        return@launch
+                                    }
+
                                     // Reset coords — GPS is only fetched inside the location
                                     // dialog if the user explicitly picks "Use GPS".
                                     // This prevents real coordinates from leaking into
                                     // transactions where the user chose "Skip" or "Search".
                                     lat = 0.0; lng = 0.0; locationName = ""
-                                    val amountVal = amount.toDoubleOrNull() ?: 0.0
+
                                     if (isExpense && amountVal > 0) {
                                         val anomaly = viewModel.checkAnomaly(amountVal, selectedCategoryName)
                                         if (anomaly.isAnomaly) {

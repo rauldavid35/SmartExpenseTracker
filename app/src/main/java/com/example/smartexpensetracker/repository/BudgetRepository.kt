@@ -30,7 +30,11 @@ class BudgetRepository {
 
     fun getMonthlyBudget(userId: String): Flow<MonthlyBudget?> = callbackFlow {
         val subscription = getBudgetDoc(userId)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
                 val budget = snapshot?.toObject(MonthlyBudget::class.java)
                 trySend(budget)
             }
@@ -39,7 +43,11 @@ class BudgetRepository {
 
     fun getCategorySettingsFlow(userId: String): Flow<List<BudgetCategorySetting>> = callbackFlow {
         val subscription = getCategorySettings(userId)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
                 if (snapshot != null) {
                     val settings = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(BudgetCategorySetting::class.java)?.copy(name = doc.id)

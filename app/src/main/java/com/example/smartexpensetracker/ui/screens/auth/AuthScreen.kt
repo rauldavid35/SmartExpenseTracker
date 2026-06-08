@@ -35,7 +35,7 @@ fun AuthScreen(
     val authState by viewModel.authState.collectAsState()
 
     LaunchedEffect(authState.user) {
-        if (authState.user != null) onAuthSuccess()
+        if (authState.user != null && authState.error == null) onAuthSuccess()
     }
 
     if (showForgot) {

@@ -14,13 +14,14 @@ import kotlinx.coroutines.flow.receiveAsFlow
 class BiometricPromptManager(
     private val activity: FragmentActivity
 ) {
-    private val resultChannel = Channel<BiometricResult>()
+    private val resultChannel = Channel<BiometricResult>(capacity = Channel.BUFFERED)
     val promptResults = resultChannel.receiveAsFlow()
 
     fun showBiometricPrompt(
         title: String,
         description: String
     ) {
+        android.util.Log.d("BiometricPrompt", "showBiometricPrompt called: title=$title")
         val manager = BiometricManager.from(activity)
         val authenticators = if (Build.VERSION.SDK_INT >= 30) {
             BIOMETRIC_STRONG or DEVICE_CREDENTIAL
@@ -35,7 +36,9 @@ class BiometricPromptManager(
             promptInfo.setNegativeButtonText("Cancel")
         }
 
-        when (manager.canAuthenticate(authenticators)) {
+        val canAuth = manager.canAuthenticate(authenticators)
+        android.util.Log.d("BiometricPrompt", "canAuthenticate returned: $canAuth")
+        when (canAuth) {
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
                 resultChannel.trySend(BiometricResult.HardwareUnavailable)
                 return

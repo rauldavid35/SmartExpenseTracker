@@ -32,6 +32,13 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
     val budgetResetDay by prefs.budgetResetDay.collectAsState()
     val notifyOnReset  by prefs.notifyOnReset.collectAsState()
 
+    val sharedPrefs = remember {
+        context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var isBiometricEnabled by remember {
+        mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false))
+    }
+
     var showDayPicker by remember { mutableStateOf(false) }
 
     Scaffold { padding ->
@@ -79,6 +86,24 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
                     } else {
                         NotificationHelper.cancelBudgetResetAlarm(context)
                     }
+                }
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            SectionHeader("Security")
+
+            SettingsToggleRow(
+                icon     = Icons.Default.Fingerprint,
+                title    = "Fingerprint Unlock",
+                subtitle = "Use biometrics to unlock the app",
+                checked  = isBiometricEnabled,
+                onToggle = { enabled ->
+                    sharedPrefs.edit()
+                        .putBoolean("biometric_enabled", enabled)
+                        .putBoolean("biometric_enrollment_asked", true)
+                        .apply()
+                    isBiometricEnabled = enabled
                 }
             )
 

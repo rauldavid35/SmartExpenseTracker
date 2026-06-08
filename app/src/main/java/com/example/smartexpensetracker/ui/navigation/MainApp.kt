@@ -83,23 +83,58 @@ fun MainApp(
     var isBiometricEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false))
     }
-    var isAppUnlocked      by remember { mutableStateOf(false) }
-    var showEnrollmentDialog by remember { mutableStateOf(false) }
+    var isAppUnlocked by remember { mutableStateOf(!isBiometricEnabled) }
+    var showEnrollmentDialog by remember {
+        mutableStateOf(
+            authState.user != null &&
+                    !isBiometricEnabled &&
+                    !sharedPrefs.getBoolean("biometric_enrollment_asked", false)
+        )
+    }
     val biometricResult    by biometricManager.promptResults.collectAsState(initial = null)
 
     LaunchedEffect(biometricResult) {
-        if (biometricResult is BiometricPromptManager.BiometricResult.AuthenticationSuccess) {
-            isAppUnlocked = true
+        when (val result = biometricResult) {
+            is BiometricPromptManager.BiometricResult.AuthenticationSuccess -> {
+                isAppUnlocked = true
+            }
+            is BiometricPromptManager.BiometricResult.AuthenticationNotSet -> {
+                android.widget.Toast.makeText(
+                    context,
+                    "No biometric enrolled on this device. Set one up in your phone's settings.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                sharedPrefs.edit().putBoolean("biometric_enabled", false).apply()
+                isBiometricEnabled = false
+                isAppUnlocked = true
+            }
+            is BiometricPromptManager.BiometricResult.HardwareUnavailable,
+            is BiometricPromptManager.BiometricResult.FeatureUnavailable -> {
+                android.widget.Toast.makeText(
+                    context,
+                    "Biometric not available on this device.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                sharedPrefs.edit().putBoolean("biometric_enabled", false).apply()
+                isBiometricEnabled = false
+                isAppUnlocked = true
+            }
+            is BiometricPromptManager.BiometricResult.AuthenticationError -> {
+                android.widget.Toast.makeText(
+                    context,
+                    "Auth error: ${result.error}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            else -> { /* failed attempt or null — let user retry */ }
         }
     }
 
     LaunchedEffect(authState.user, isAppUnlocked) {
-        if (authState.user != null && !isAppUnlocked) {
-            if (isBiometricEnabled) {
-                biometricManager.showBiometricPrompt("Welcome Back", "Confirm fingerprint")
-            } else {
-                showEnrollmentDialog = true
-            }
+        if (authState.user == null) {
+            isAppUnlocked = !isBiometricEnabled
+        } else if (!isAppUnlocked && isBiometricEnabled) {
+            biometricManager.showBiometricPrompt("Welcome Back", "Confirm fingerprint")
         }
     }
 
@@ -137,7 +172,10 @@ fun MainApp(
                     text  = { Text("Enable fingerprint for faster login?") },
                     confirmButton = {
                         Button(onClick = {
-                            sharedPrefs.edit().putBoolean("biometric_enabled", true).apply()
+                            sharedPrefs.edit()
+                                .putBoolean("biometric_enabled", true)
+                                .putBoolean("biometric_enrollment_asked", true)
+                                .apply()
                             isBiometricEnabled = true
                             biometricManager.showBiometricPrompt("Verify", "Scan now")
                             showEnrollmentDialog = false
@@ -145,6 +183,9 @@ fun MainApp(
                     },
                     dismissButton = {
                         TextButton(onClick = {
+                            sharedPrefs.edit()
+                                .putBoolean("biometric_enrollment_asked", true)
+                                .apply()
                             showEnrollmentDialog = false
                             isAppUnlocked = true
                         }) { Text("No") }

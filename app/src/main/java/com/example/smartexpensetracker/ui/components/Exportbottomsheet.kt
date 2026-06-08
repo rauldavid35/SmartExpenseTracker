@@ -35,6 +35,14 @@ fun ExportBottomSheet(
     var selectedScope by remember { mutableStateOf(ExportScope.FULL_REPORT) }
     var isExporting by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        viewModel.exportIntent.collect { intent ->
+            context.startActivity(intent)
+            isExporting = false
+            onDismiss()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
@@ -119,15 +127,7 @@ fun ExportBottomSheet(
             Button(
                 onClick = {
                     isExporting = true
-                    try {
-                        val intent = viewModel.buildExportIntent(context, selectedFormat, selectedScope)
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        android.util.Log.e("Export", "Export failed", e)
-                        android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                    isExporting = false
-                    onDismiss()
+                    viewModel.buildExportIntent(context, selectedFormat, selectedScope)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
