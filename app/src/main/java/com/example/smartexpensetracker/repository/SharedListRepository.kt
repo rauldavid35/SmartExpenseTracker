@@ -216,16 +216,13 @@ class SharedListRepository {
                 if (System.currentTimeMillis() > invite.expiresAt)
                     return@runTransaction RedeemResult.Expired
 
-                val listRef  = listsCol.document(invite.listId)
-                val listSnap = txn.get(listRef)
-                if (!listSnap.exists()) return@runTransaction RedeemResult.NotFound
+                val listRef = listsCol.document(invite.listId)
 
-                @Suppress("UNCHECKED_CAST")
-                val members = (listSnap.get("members") as? List<String>) ?: emptyList()
-                if (members.contains(userId))
-                    return@runTransaction RedeemResult.AlreadyMember
-
-                // Atomically: mark code used + add user to list members
+                // Atomic: mark code used + add user to members.
+                // arrayUnion is idempotent — if user is already a member, nothing changes.
+                // We don't read the list here because non-members can't read shared_lists
+                // by design (security rule). Returning AlreadyMember would require a read
+                // that the new joiner cannot perform yet.
                 txn.update(inviteRef, "used", true)
                 txn.update(listRef, "members", FieldValue.arrayUnion(userId))
 
@@ -291,18 +288,10 @@ class SharedListRepository {
 
                 if (invite.status != "pending") return@runTransaction RedeemResult.AlreadyUsed
 
-                val listRef  = listsCol.document(invite.listId)
-                val listSnap = txn.get(listRef)
-                if (!listSnap.exists()) return@runTransaction RedeemResult.NotFound
+                val listRef = listsCol.document(invite.listId)
 
-                @Suppress("UNCHECKED_CAST")
-                val members = (listSnap.get("members") as? List<String>) ?: emptyList()
-                if (members.contains(userId)) {
-                    // Already a member: still mark invite as accepted to clean up the UI
-                    txn.update(inviteRef, "status", "accepted")
-                    return@runTransaction RedeemResult.AlreadyMember
-                }
-
+                // Same reasoning as redeemInviteCode: skip the read of the list.
+                // arrayUnion is idempotent.
                 txn.update(inviteRef, "status", "accepted")
                 txn.update(listRef, "members", FieldValue.arrayUnion(userId))
 
