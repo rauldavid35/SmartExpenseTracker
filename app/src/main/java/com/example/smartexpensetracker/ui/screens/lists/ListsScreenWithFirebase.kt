@@ -47,7 +47,7 @@ fun ListsScreenWithFirebase(
     var showVoiceInput by remember { mutableStateOf(false) }
 
     // ── Voice state ───────────────────────────────────────────────────────────
-    val voiceParser = remember { VoiceParser(apiKey = "key") }
+    val voiceParser = remember { VoiceParser(apiKey = com.example.smartexpensetracker.BuildConfig.GEMINI_API_KEY) }
     var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
     var isVoiceParsing   by remember { mutableStateOf(false) }
 
