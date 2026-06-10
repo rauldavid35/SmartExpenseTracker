@@ -65,12 +65,12 @@ class BiometricPromptManager(
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    resultChannel.trySend(BiometricResult.AuthenticationSuccess)
+                    resultChannel.trySend(BiometricResult.AuthenticationSuccess())
                 }
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    resultChannel.trySend(BiometricResult.AuthenticationFailed)
+                    resultChannel.trySend(BiometricResult.AuthenticationFailed())
                 }
             }
         )
@@ -81,8 +81,8 @@ class BiometricPromptManager(
         data object HardwareUnavailable : BiometricResult
         data object FeatureUnavailable : BiometricResult
         data object AuthenticationNotSet : BiometricResult
-        data object AuthenticationSuccess : BiometricResult
-        data object AuthenticationFailed : BiometricResult
-        data class AuthenticationError(val error: String) : BiometricResult
+        data class AuthenticationSuccess(val id: Long = System.nanoTime()) : BiometricResult
+        data class AuthenticationFailed(val id: Long = System.nanoTime()) : BiometricResult
+        data class AuthenticationError(val error: String, val id: Long = System.nanoTime()) : BiometricResult
     }
 }

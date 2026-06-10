@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 fun ListsScreenWithFirebase(
     onMenuClick: () -> Unit,
     onListClick: (String, String) -> Unit,
+    onSharedListsClick: () -> Unit = {},
     viewModel: ListsViewModel = viewModel(),
     externalVoiceTrigger: Boolean = false,
     onExternalTriggerHandled: () -> Unit = {}
@@ -123,6 +124,29 @@ fun ListsScreenWithFirebase(
                 }
             }
         }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = LightMint),
+            shape  = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .clickable { onSharedListsClick() }
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Group, null, tint = PrimaryGreen)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Shared lists", style = MaterialTheme.typography.titleMedium)
+                    Text("Lists shared with you or by you", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                }
+                Icon(Icons.Default.ChevronRight, null, tint = PrimaryGreen)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
         // ── List of Shopping Lists ────────────────────────────────────────────
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

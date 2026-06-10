@@ -16,6 +16,7 @@ import com.example.smartexpensetracker.ui.theme.SmartExpenseTrackerTheme
 import com.example.smartexpensetracker.utils.BiometricPromptManager
 import com.example.smartexpensetracker.utils.NotificationHelper
 import com.example.smartexpensetracker.utils.ShakeDetector
+import com.example.smartexpensetracker.utils.NetworkMonitor
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +35,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        NetworkMonitor.init(applicationContext)
 
         // Create notification channels as early as possible
         NotificationHelper.createChannels(this)

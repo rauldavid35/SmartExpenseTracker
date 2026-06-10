@@ -35,8 +35,11 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
     val sharedPrefs = remember {
         context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
     }
-    var isBiometricEnabled by remember {
-        mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false))
+    val biometricKey       = "biometric_enabled_$uid"
+    val enrollmentAskedKey = "biometric_enrollment_asked_$uid"
+
+    var isBiometricEnabled by remember(uid) {
+        mutableStateOf(sharedPrefs.getBoolean(biometricKey, false))
     }
 
     var showDayPicker by remember { mutableStateOf(false) }
@@ -100,8 +103,8 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
                 checked  = isBiometricEnabled,
                 onToggle = { enabled ->
                     sharedPrefs.edit()
-                        .putBoolean("biometric_enabled", enabled)
-                        .putBoolean("biometric_enrollment_asked", true)
+                        .putBoolean(biometricKey, enabled)
+                        .putBoolean(enrollmentAskedKey, true)
                         .apply()
                     isBiometricEnabled = enabled
                 }

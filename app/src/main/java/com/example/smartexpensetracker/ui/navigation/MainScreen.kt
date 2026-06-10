@@ -26,6 +26,8 @@ import com.example.smartexpensetracker.ui.screens.heatmap.HeatmapScreen
 import com.example.smartexpensetracker.ui.screens.home.HomeScreenWithFirebase
 import com.example.smartexpensetracker.ui.screens.lists.ListDetailScreen
 import com.example.smartexpensetracker.ui.screens.lists.ListsScreenWithFirebase
+import com.example.smartexpensetracker.ui.screens.lists.SharedListDetailScreen
+import com.example.smartexpensetracker.ui.screens.lists.SharedListsScreen
 import com.example.smartexpensetracker.ui.components.PlaceholderScreen
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
@@ -95,7 +97,7 @@ fun MainScreen(
             bottomBar = {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
-                if (currentRoute in listOf("home", "expenses", "budget", "lists", "heatmap", "profile", "settings")) {
+                if (currentRoute in listOf("home", "expenses", "budget", "lists", "heatmap", "profile", "settings", "shared_lists")) {
                     BottomNavigationBar(navController)
                 }
             }
@@ -127,6 +129,7 @@ fun MainScreen(
                     ListsScreenWithFirebase(
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onListClick = { listId, listName -> navController.navigate("list_detail/$listId/$listName") },
+                        onSharedListsClick = { navController.navigate("shared_lists") },
                         externalVoiceTrigger = triggerAction.intValue == 2,
                         onExternalTriggerHandled = { triggerAction.intValue = 0 }
                     )
@@ -140,6 +143,27 @@ fun MainScreen(
                 ) { backStackEntry ->
                     ListDetailScreen(
                         listId = backStackEntry.arguments?.getString("listId") ?: "",
+                        listName = backStackEntry.arguments?.getString("listName") ?: "List",
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+                composable("shared_lists") {
+                    SharedListsScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onListClick = { listId, listName ->
+                            navController.navigate("shared_list_detail/$listId/$listName")
+                        }
+                    )
+                }
+                composable(
+                    "shared_list_detail/{listId}/{listName}",
+                    arguments = listOf(
+                        navArgument("listId")   { type = NavType.StringType },
+                        navArgument("listName") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    SharedListDetailScreen(
+                        listId   = backStackEntry.arguments?.getString("listId") ?: "",
                         listName = backStackEntry.arguments?.getString("listName") ?: "List",
                         onBackClick = { navController.popBackStack() }
                     )

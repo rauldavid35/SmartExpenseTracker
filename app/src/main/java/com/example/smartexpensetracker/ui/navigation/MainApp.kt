@@ -80,15 +80,19 @@ fun MainApp(
     val sharedPrefs = remember {
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     }
-    var isBiometricEnabled by remember {
-        mutableStateOf(sharedPrefs.getBoolean("biometric_enabled", false))
+
+    val biometricKey       = "biometric_enabled_$uid"
+    val enrollmentAskedKey = "biometric_enrollment_asked_$uid"
+
+    var isBiometricEnabled by remember(uid) {
+        mutableStateOf(sharedPrefs.getBoolean(biometricKey, false))
     }
-    var isAppUnlocked by remember { mutableStateOf(!isBiometricEnabled) }
-    var showEnrollmentDialog by remember {
+    var isAppUnlocked by remember(uid) { mutableStateOf(!isBiometricEnabled) }
+    var showEnrollmentDialog by remember(uid) {
         mutableStateOf(
             authState.user != null &&
                     !isBiometricEnabled &&
-                    !sharedPrefs.getBoolean("biometric_enrollment_asked", false)
+                    !sharedPrefs.getBoolean(enrollmentAskedKey, false)
         )
     }
     val biometricResult    by biometricManager.promptResults.collectAsState(initial = null)
@@ -104,7 +108,7 @@ fun MainApp(
                     "No biometric enrolled on this device. Set one up in your phone's settings.",
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                sharedPrefs.edit().putBoolean("biometric_enabled", false).apply()
+                sharedPrefs.edit().putBoolean(biometricKey, false).apply()
                 isBiometricEnabled = false
                 isAppUnlocked = true
             }
@@ -115,7 +119,7 @@ fun MainApp(
                     "Biometric not available on this device.",
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                sharedPrefs.edit().putBoolean("biometric_enabled", false).apply()
+                sharedPrefs.edit().putBoolean(biometricKey, false).apply()
                 isBiometricEnabled = false
                 isAppUnlocked = true
             }
@@ -173,8 +177,8 @@ fun MainApp(
                     confirmButton = {
                         Button(onClick = {
                             sharedPrefs.edit()
-                                .putBoolean("biometric_enabled", true)
-                                .putBoolean("biometric_enrollment_asked", true)
+                                .putBoolean(biometricKey, true)
+                                .putBoolean(enrollmentAskedKey, true)
                                 .apply()
                             isBiometricEnabled = true
                             biometricManager.showBiometricPrompt("Verify", "Scan now")
@@ -184,7 +188,7 @@ fun MainApp(
                     dismissButton = {
                         TextButton(onClick = {
                             sharedPrefs.edit()
-                                .putBoolean("biometric_enrollment_asked", true)
+                                .putBoolean(enrollmentAskedKey, true)
                                 .apply()
                             showEnrollmentDialog = false
                             isAppUnlocked = true
