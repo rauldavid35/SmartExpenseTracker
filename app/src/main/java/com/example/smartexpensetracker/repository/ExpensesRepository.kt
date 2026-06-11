@@ -23,7 +23,7 @@ class ExpensesRepository {
                 if (snapshot != null) {
                     val list = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(ExpenseTransaction::class.java)?.copy(id = doc.id)
-                    }
+                    }.sortedByDescending { it.date }
                     trySend(list)
                 }
             }

@@ -188,6 +188,31 @@ object ExportRepository {
     // XML
     // ─────────────────────────────────────────────────────────────────────────
 
+
+    fun dashboardsToXml(dashboards: List<Dashboard>, budget: BudgetUiState): String {
+        val sb = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dashboards>\n")
+        sb.append("  <report_date>${dateFmt.format(Date())}</report_date>\n")
+        dashboards.forEach { d ->
+            sb.append("  <dashboard><name>${d.name.xml()}</name>\n")
+            sb.append("    <widgets>")
+            d.widgets.forEach { w -> sb.append("<widget>${w.displayName.xml()}</widget>") }
+            sb.append("</widgets>\n")
+            sb.append("    <categories>\n")
+            budget.categories.forEach { cat ->
+                val pct = if (cat.budget > 0) (cat.spent / cat.budget * 100).toInt() else 0
+                sb.append("      <category><name>${cat.name.xml()}</name>")
+                sb.append("<limit>${cat.budget}</limit>")
+                sb.append("<spent>${cat.spent}</spent>")
+                sb.append("<remaining>${cat.budget - cat.spent}</remaining>")
+                sb.append("<usage_pct>$pct</usage_pct></category>\n")
+            }
+            sb.append("    </categories>\n")
+            sb.append("  </dashboard>\n")
+        }
+        sb.append("</dashboards>")
+        return sb.toString()
+    }
+
     fun expensesToXml(expenses: List<ExpenseTransaction>): String {
         val sb = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<expenses>\n")
         expenses.sortedByDescending { it.date }.forEach { e ->
@@ -217,7 +242,23 @@ object ExportRepository {
                 }
             sb.append("    </transactions></category>\n")
         }
-        sb.append("  </categories>\n</financial_report>")
+        sb.append("  </categories>\n")
+
+        // Other / Income block — transactions not associated with any budget category.
+        val catNames = budget.categories.map { it.name }.toSet()
+        val other = expenses.filter { it.category !in catNames }.sortedByDescending { it.date }
+        if (other.isNotEmpty()) {
+            sb.append("  <other_transactions>\n")
+            other.forEach { e ->
+                sb.append("    <transaction><name>${e.name.xml()}</name>")
+                sb.append("<amount>${e.amount}</amount>")
+                sb.append("<type>${if (e.amount < 0) "Expense" else "Income"}</type>")
+                sb.append("<category>${e.category.xml()}</category>")
+                sb.append("<date>${dateFmt.format(Date(e.date))}</date></transaction>\n")
+            }
+            sb.append("  </other_transactions>\n")
+        }
+        sb.append("</financial_report>")
         return sb.toString()
     }
 
@@ -248,7 +289,7 @@ object ExportRepository {
                     sh.createRow(0).createCell(0).setCellValue("No dashboards saved yet.")
                 } else {
                     dashboards.forEachIndexed { i, d ->
-                        writeDashboardSheet(wb, styles, d, budget, expenses, "${i + 1}. ${d.name}".take(28))
+                        writeDashboardSheet(wb, styles, d, budget, expenses, "${i + 1}. ${d.name}".take(28).sanitizeSheetName())
                     }
                 }
             }
@@ -257,7 +298,7 @@ object ExportRepository {
                 writeBudgetSummarySheet(wb, styles, budget)
                 writeByCategorySheet(wb, styles, expenses, budget)
                 dashboards.forEachIndexed { i, d ->
-                    writeDashboardSheet(wb, styles, d, budget, expenses, "Dash ${i + 1}: ${d.name}".take(28))
+                    writeDashboardSheet(wb, styles, d, budget, expenses, "${i + 1}. ${d.name}".take(28).sanitizeSheetName())
                 }
             }
         }
@@ -1018,7 +1059,9 @@ object ExportRepository {
 
         /** Horizontal progress bar (single-cat utilisation). */
         private fun drawProgressBar(catColor: String, pct: Int) {
-            ensureSpace(14f)
+            ensureSpace(20f)
+            // Mic gap înainte de bară pentru a o separa vizual de header.
+            y += 4f
             val barW = pageW - mg * 2 - 16f
             val bgP = Paint().apply {
                 color = android.graphics.Color.parseColor("#E8F5E9")
@@ -1037,7 +1080,8 @@ object ExportRepository {
             cv.drawRoundRect(bgR, 4f, 4f, bgP)
             val fillW = barW * (pct.coerceIn(0, 100) / 100f)
             if (fillW > 0) cv.drawRoundRect(RectF(mg + 8f, y, mg + 8f + fillW, y + 9f), 4f, 4f, fillP)
-            y += 13f
+            // Mai mult spațiu după bară pentru a nu se suprapune cu prima tranzacție.
+            y += 18f
         }
 
         /** Real pie chart (filled wedges + side legend). */
@@ -1330,4 +1374,8 @@ object ExportRepository {
     private fun String.xml()  = replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     private fun String.json() = replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n")
     private fun String.csv()  = replace("\"","\"\"")
+
+    /** Curăță numele unui sheet Excel — elimină caracterele interzise: : \ / ? * [ ] */
+    private fun String.sanitizeSheetName(): String =
+        replace(Regex("[:\\\\/?*\\[\\]]"), " ").trim().ifEmpty { "Sheet" }
 }

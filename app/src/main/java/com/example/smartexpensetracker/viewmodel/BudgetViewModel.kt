@@ -206,9 +206,12 @@ class BudgetViewModel(
         format: ExportFormat,
         scope: ExportScope
     ) {
-        val state = uiState.value
-        val exp   = expenses.value
-        val dash  = dashboards.value
+        // Recompute state fresh — uiState.value may be stale because of WhileSubscribed.
+        val exp      = _expenses.value
+        val budgetCfg = _budgetConfig.value
+        val settings = _categorySettings.value
+        val dash     = dashboards.value
+        val state    = buildBudgetUiStateForExport(exp, budgetCfg, settings)
 
         viewModelScope.launch(Dispatchers.IO) {
             val fileName: String; val mime: String; val file: File
@@ -274,12 +277,19 @@ class BudgetViewModel(
                     "  \"dashboards\": ${ExportRepository.dashboardsToJson(dash, state, exp)}\n}"
     }
 
-    private fun buildXml(scope: ExportScope, exp: List<ExpenseTransaction>, state: BudgetUiState) =
+    private fun buildXml(scope: ExportScope, exp: List<ExpenseTransaction>, state: BudgetUiState): String =
         when (scope) {
             ExportScope.EXPENSES_ONLY -> ExportRepository.expensesToXml(exp)
-            ExportScope.FULL_REPORT,
-            ExportScope.EVERYTHING    -> ExportRepository.fullReportToXml(exp, state)
-            ExportScope.DASHBOARDS    -> "<note>Dashboard XML — use JSON or PDF for richer output.</note>"
+            ExportScope.FULL_REPORT   -> ExportRepository.fullReportToXml(exp, state)
+            ExportScope.DASHBOARDS    -> ExportRepository.dashboardsToXml(dashboards.value, state)
+            ExportScope.EVERYTHING    -> {
+                // Combine full report + dashboards under a single root element.
+                val full = ExportRepository.fullReportToXml(exp, state)
+                    .replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n", "")
+                val dash = ExportRepository.dashboardsToXml(dashboards.value, state)
+                    .replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n", "")
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<export>\n$full\n$dash\n</export>"
+            }
         }
 
     // ── Factory ───────────────────────────────────────────────────────────────
@@ -288,5 +298,44 @@ class BudgetViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             BudgetViewModel(context) as T
+    }
+
+    /**
+     * Recompute BudgetUiState directly from raw flows, bypassing the WhileSubscribed
+     * delay of the StateFlow. Used by export to ensure data is fresh.
+     */
+    private fun buildBudgetUiStateForExport(
+        expenses: List<ExpenseTransaction>,
+        budgetConfig: MonthlyBudget?,
+        settings: List<BudgetCategorySetting>
+    ): BudgetUiState {
+        val incomeTransactions = expenses.filter { it.amount > 0 }
+        val totalIncome = incomeTransactions.sumOf { it.amount }
+
+        val categoryNames = settings.map { it.name }.toSet()
+        val categoryIncomeBoostMap = incomeTransactions
+            .filter { it.category in categoryNames }
+            .groupBy { it.category }
+            .mapValues { entry -> entry.value.sumOf { it.amount } }
+
+        val spentMap = expenses.filter { it.amount < 0 }
+            .groupBy { it.category }
+            .mapValues { entry -> entry.value.sumOf { abs(it.amount) } }
+
+        val categoryViews = settings.map { setting ->
+            CategoryBudgetView(
+                name     = setting.name,
+                spent    = spentMap[setting.name] ?: 0.0,
+                budget   = setting.limit + (categoryIncomeBoostMap[setting.name] ?: 0.0),
+                colorHex = setting.colorHex
+            )
+        }
+
+        return BudgetUiState(
+            totalLimit = (budgetConfig?.totalLimit ?: 0.0) + totalIncome,
+            totalSpent = spentMap.values.sum(),
+            categories = categoryViews,
+            isLoading  = false
+        )
     }
 }

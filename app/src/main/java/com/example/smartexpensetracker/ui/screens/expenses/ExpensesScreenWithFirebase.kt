@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,6 +60,8 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 import java.text.Normalizer
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
@@ -319,39 +322,79 @@ fun ExpensesScreenWithFirebase(
 
             // Expense list
             LazyColumn(
-                contentPadding    = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(expenses) { transaction ->
-                    Card(
-                        colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.clickable {
-                            selectedExpense = transaction
-                            name = transaction.name
-                            amount = abs(transaction.amount).toString()
-                            selectedCategoryName = transaction.category
-                            isExpense = transaction.amount < 0
-                            detectedAddress = transaction.locationName
-                            showAddDialog = true
-                        }
-                    ) {
-                        Row(
-                            modifier          = Modifier.padding(16.dp).fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(transaction.name, style = MaterialTheme.typography.titleMedium)
+                val dayFormat   = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                val monthKey    = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+
+                itemsIndexed(expenses, key = { _, t -> t.id }) { index, transaction ->
+                    val txDate = Date(transaction.date)
+                    val txMonth = monthKey.format(txDate)
+                    val prevMonth = if (index > 0) monthKey.format(Date(expenses[index - 1].date)) else null
+
+                    Column {
+                        // Separator de lună: apare deasupra primului expense dintr-o lună nouă
+                        if (prevMonth != txMonth) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    color = TextSecondary.copy(alpha = 0.3f)
+                                )
                                 Text(
-                                    "${transaction.category}${if (transaction.locationName.isNotEmpty()) " • ${transaction.locationName}" else ""}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
+                                    monthFormat.format(txDate).uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    color = TextSecondary.copy(alpha = 0.3f)
                                 )
                             }
-                            MoneyText(
-                                text  = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}",
-                                color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                        }
+
+                        Card(
+                            colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.clickable {
+                                selectedExpense = transaction
+                                name = transaction.name
+                                amount = abs(transaction.amount).toString()
+                                selectedCategoryName = transaction.category
+                                isExpense = transaction.amount < 0
+                                detectedAddress = transaction.locationName
+                                showAddDialog = true
+                            }
+                        ) {
+                            Row(
+                                modifier          = Modifier.padding(16.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(transaction.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        buildString {
+                                            append(transaction.category)
+                                            if (transaction.locationName.isNotEmpty()) {
+                                                append(" • ${transaction.locationName}")
+                                            }
+                                            append(" • ")
+                                            append(dayFormat.format(txDate))
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                                MoneyText(
+                                    text  = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}",
+                                    color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                         }
                     }
                 }
