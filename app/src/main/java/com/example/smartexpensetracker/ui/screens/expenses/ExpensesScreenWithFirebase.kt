@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -367,6 +369,7 @@ fun ExpensesScreenWithFirebase(
                                 selectedCategoryName = transaction.category
                                 isExpense = transaction.amount < 0
                                 detectedAddress = transaction.locationName
+                                scannedItems = transaction.items.map { it.name to it.price }
                                 showAddDialog = true
                             }
                         ) {
@@ -470,7 +473,9 @@ fun ExpensesScreenWithFirebase(
                 onDismissRequest = { showAddDialog = false; selectedExpense = null; scannedItems = emptyList() },
                 title = { Text(if (isEditing) "Edit Transaction" else "Add Transaction") },
                 text = {
-                    Column {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    ) {
                         OutlinedTextField(
                             value = name, onValueChange = { name = it },
                             label = { Text("Name / Details") },
@@ -492,11 +497,16 @@ fun ExpensesScreenWithFirebase(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = PrimaryGreen
                             )
-                            Card( // Am adăugat un mic Card pentru a arăta mai curat (opțional)
+                            Card(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
                             ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(8.dp)
+                                        .heightIn(max = 140.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
                                     scannedItems.forEach { (itemName, itemPrice) ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -507,11 +517,13 @@ fun ExpensesScreenWithFirebase(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 modifier = Modifier.weight(1f)
                                             )
-                                            Text(
-                                                String.format("%.2f", itemPrice),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = PrimaryGreen
-                                            )
+                                            if (itemPrice > 0) {
+                                                Text(
+                                                    String.format("%.2f", itemPrice),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = PrimaryGreen
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -993,7 +1005,10 @@ fun ExpensesScreenWithFirebase(
                                     isExpense       = isExpense,
                                     locationName    = locationName,
                                     lat             = lat,
-                                    lng             = lng
+                                    lng             = lng,
+                                    items = scannedItems.map {
+                                        com.example.smartexpensetracker.model.ReceiptItem(it.first, it.second)
+                                    }
                                 )
                                 showLocationDialog = false
                                 selectedExpense    = null
@@ -1038,7 +1053,18 @@ fun ExpensesScreenWithFirebase(
                     }
                 },
                 confirmButton = {
-                    Button(onClick = { name = scannedRawText; showScannedTextDialog = false; showAddDialog = true }) {
+                    Button(onClick = {
+                        // Numele NU se completează automat — user-ul îl alege.
+                        // Textul OCR e împărțit pe linii și pus în lista de items (informativ).
+                        name = ""
+                        scannedItems = scannedRawText
+                            .lines()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .map { line -> line to 0.0 }
+                        showScannedTextDialog = false
+                        showAddDialog = true
+                    }) {
                         Text("Use This")
                     }
                 }
@@ -1176,17 +1202,13 @@ fun ExpensesScreenWithFirebase(
 fun saveTransaction(
     viewModel: ExpensesViewModel, selectedExpense: ExpenseTransaction?,
     name: String, amountStr: String, category: String,
-    isExpense: Boolean, locationName: String, lat: Double, lng: Double
+    isExpense: Boolean, locationName: String, lat: Double, lng: Double,
+    items: List<com.example.smartexpensetracker.model.ReceiptItem> = emptyList()
 ) {
     val amountVal   = amountStr.toDoubleOrNull() ?: 0.0
     val finalAmount = if (isExpense) -amountVal else amountVal
-    // For expenses: use the chosen category directly.
-    // For income:   category is either "Income" (general budget only) or a specific
-    //               budget category name (user wants to extend that category's limit too).
-    //               Either way we store it as-is; BudgetViewModel handles the logic.
-    //               The positive amount ensures spentMap (amount < 0 filter) never counts it.
     if (selectedExpense != null) viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
-    else viewModel.addExpense(name, finalAmount, category, locationName, lat, lng)
+    else viewModel.addExpense(name, finalAmount, category, locationName, lat, lng, items)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

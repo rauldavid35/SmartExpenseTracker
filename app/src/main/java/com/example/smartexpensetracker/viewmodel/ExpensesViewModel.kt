@@ -93,7 +93,8 @@ class ExpensesViewModel : ViewModel() {
         category: String,
         locationName: String = "",
         lat: Double = 0.0,
-        lng: Double = 0.0
+        lng: Double = 0.0,
+        items: List<com.example.smartexpensetracker.model.ReceiptItem> = emptyList()
     ) {
         val userId = auth.currentUser?.uid ?: return
         val expense = ExpenseTransaction(
@@ -103,7 +104,8 @@ class ExpensesViewModel : ViewModel() {
             date = System.currentTimeMillis(),
             locationName = locationName,
             latitude = lat,
-            longitude = lng
+            longitude = lng,
+            items = items
         )
         viewModelScope.launch {
             expensesRepository.addExpense(userId, expense)
