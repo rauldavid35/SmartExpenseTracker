@@ -27,10 +27,6 @@ import com.example.smartexpensetracker.model.ExpenseTransaction
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import kotlin.math.*
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. PIE CHART
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun PieChartCard(slices: List<PieSlice>, modifier: Modifier = Modifier) {
     val total = slices.sumOf { it.value.toDouble() }.toFloat().coerceAtLeast(0.001f)
@@ -86,7 +82,6 @@ fun PieChartCard(slices: List<PieSlice>, modifier: Modifier = Modifier) {
                         )
                         startAngle += sliceSweep
                     }
-                    // centre circle (white cutout feel)
                     drawCircle(
                         color = Color.White,
                         radius = (diameter / 2f) - stroke / 2f,
@@ -96,7 +91,6 @@ fun PieChartCard(slices: List<PieSlice>, modifier: Modifier = Modifier) {
 
                 Spacer(Modifier.width(16.dp))
 
-                // Legend
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     slices.forEach { slice ->
                         val pct = ((slice.value / total) * 100).toInt()
@@ -121,10 +115,6 @@ fun PieChartCard(slices: List<PieSlice>, modifier: Modifier = Modifier) {
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. BAR CHART  (daily / weekly spending)
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun BarChartCard(entries: List<BarEntry>, title: String = "Daily Spending", modifier: Modifier = Modifier) {
@@ -171,7 +161,6 @@ fun BarChartCard(entries: List<BarEntry>, title: String = "Daily Spending", modi
                     val barH = (entry.value / maxValue) * chartHeight * progress
                     val color = if (entry.value >= maxValue * 0.9f) barColorOver else barColor
 
-                    // Bar
                     drawRoundRect(
                         color = color.copy(alpha = 0.85f),
                         topLeft = Offset(x, chartHeight - barH),
@@ -181,7 +170,6 @@ fun BarChartCard(entries: List<BarEntry>, title: String = "Daily Spending", modi
                 }
             }
 
-            // X-axis labels
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
@@ -198,10 +186,6 @@ fun BarChartCard(entries: List<BarEntry>, title: String = "Daily Spending", modi
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. BUDGET VS ACTUAL
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier = Modifier) {
@@ -255,14 +239,12 @@ fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier 
                         )
                     }
                     Spacer(Modifier.height(4.dp))
-                    // Budget bar (background)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp)
                             .background(Color(0xFFE3F2FD), RoundedCornerShape(5.dp))
                     ) {
-                        // Spent bar (foreground)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(animRatio)
@@ -278,10 +260,6 @@ fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier 
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. SUMMARY STATS
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun SummaryStatsCard(stats: SummaryStats, modifier: Modifier = Modifier) {
@@ -317,15 +295,11 @@ private fun StatTile(label: String, value: String, color: Color) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. TOP EXPENSES
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun TopExpensesCard(expenses: List<ExpenseTransaction>, modifier: Modifier = Modifier) {
     val top = expenses
         .filter { it.amount < 0 }
-        .sortedBy { it.amount }   // most negative = biggest
+        .sortedBy { it.amount }
         .take(5)
 
     Card(
@@ -370,10 +344,6 @@ fun TopExpensesCard(expenses: List<ExpenseTransaction>, modifier: Modifier = Mod
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. MONTHLY TREND (line chart)
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
     val maxValue = entries.maxOfOrNull { it.value }?.coerceAtLeast(0.01f) ?: 1f
@@ -411,11 +381,9 @@ fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
                     Offset(i * step, h - (e.value / maxValue) * h)
                 }
 
-                // Draw up to "progress" fraction of the path
                 val totalPoints = (points.size * progress).toInt().coerceAtLeast(1)
                 val visiblePoints = points.take(totalPoints)
 
-                // Fill gradient under line
                 if (visiblePoints.size > 1) {
                     val path = Path().apply {
                         moveTo(visiblePoints.first().x, h)
@@ -430,7 +398,6 @@ fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
                             startY = 0f, endY = h
                         )
                     )
-                    // Line
                     for (i in 0 until visiblePoints.lastIndex) {
                         drawLine(
                             color = PrimaryGreen,
@@ -440,7 +407,6 @@ fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
                             cap = StrokeCap.Round
                         )
                     }
-                    // Dots
                     visiblePoints.forEach { pt ->
                         drawCircle(Color.White, radius = 5.dp.toPx(), center = pt)
                         drawCircle(PrimaryGreen, radius = 3.5.dp.toPx(), center = pt)
@@ -448,7 +414,6 @@ fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
                 }
             }
 
-            // X labels (show max 7 to avoid crowding)
             val labelStep = (entries.size / 7).coerceAtLeast(1)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 entries.filterIndexed { i, _ -> i % labelStep == 0 }.forEach { e ->
@@ -458,10 +423,6 @@ fun MonthlyTrendCard(entries: List<BarEntry>, modifier: Modifier = Modifier) {
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun LegendDot(color: Color, label: String) {

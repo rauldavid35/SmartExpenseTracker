@@ -28,19 +28,6 @@ import com.example.smartexpensetracker.model.StoreLink
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ProductScanDialog
-//
-// Shown after a successful product image scan. Displays:
-//   • Product name
-//   • Estimated price with confidence label
-//   • One row per store link — each with an "Open" button and a "Copy" button
-//   • "Add as Expense" and "Cancel" actions
-//
-// The link is shown as plain text (not a clickable underline) so the user can
-// see the full URL. Open launches the browser; Copy puts the URL on the clipboard.
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun ProductScanDialog(
     result: ProductResult,
@@ -62,7 +49,6 @@ fun ProductScanDialog(
                     .verticalScroll(rememberScrollState())
             ) {
 
-                // ── Header ────────────────────────────────────────────────────
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier         = Modifier
@@ -83,7 +69,6 @@ fun ProductScanDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // ── Product name ──────────────────────────────────────────────
                 SectionLabel("Product")
                 Text(
                     text  = result.productName,
@@ -93,7 +78,6 @@ fun ProductScanDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // ── Price ─────────────────────────────────────────────────────
                 SectionLabel("Estimated Price")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -106,7 +90,6 @@ fun ProductScanDialog(
                     ConfidenceBadge(result.priceConfidence)
                 }
 
-                // Low-confidence disclaimer
                 if (result.priceConfidence == "low") {
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
@@ -129,7 +112,6 @@ fun ProductScanDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // ── Store links ───────────────────────────────────────────────
                 SectionLabel("Where to Buy")
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -140,7 +122,6 @@ fun ProductScanDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // ── Actions ───────────────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -168,17 +149,6 @@ fun ProductScanDialog(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StoreLinkRow
-//
-// Layout:
-//   [ Store icon ] [ Store name         ]  [ Open ] [ Copy ]
-//   [ URL (full text, wraps if needed)  ]
-//
-// Both Open and Copy operate on the searchUrl which is always a valid
-// store search page — never a hallucinated product-specific URL.
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun StoreLinkRow(link: StoreLink, context: Context) {
     var copied by remember { mutableStateOf(false) }
@@ -190,7 +160,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
             .background(Color(0xFFF8F9FA))
             .padding(12.dp)
     ) {
-        // Top row: store name + action buttons
         Row(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -208,7 +177,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
                 modifier = Modifier.weight(1f)
             )
 
-            // Open in browser
             IconButton(
                 onClick  = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.searchUrl))
@@ -223,7 +191,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
                 )
             }
 
-            // Copy URL to clipboard
             IconButton(
                 onClick  = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -242,7 +209,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
             }
         }
 
-        // URL shown as plain readable text below the store name
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text     = link.searchUrl,
@@ -252,7 +218,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
             overflow = TextOverflow.Ellipsis
         )
 
-        // Reset "copied" icon after a short delay
         if (copied) {
             LaunchedEffect(copied) {
                 kotlinx.coroutines.delay(2000)
@@ -262,9 +227,6 @@ private fun StoreLinkRow(link: StoreLink, context: Context) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Small helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun SectionLabel(text: String) {

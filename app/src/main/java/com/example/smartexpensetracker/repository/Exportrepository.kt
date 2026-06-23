@@ -41,34 +41,17 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
-
-/**
- * Fully offline export — no network, no API calls.
- *
- * Scope contracts:
- *   EXPENSES_ONLY  → transaction rows only
- *   FULL_REPORT    → total budget → each category (limit/spent) → that category's transactions
- *   DASHBOARDS     → each dashboard → its categories + REAL embedded charts (pie/bar/line)
- *   EVERYTHING     → FULL_REPORT + DASHBOARDS combined
- *
- * XLSX: poi-ooxml:5.2.5 + xmlbeans:5.1.1 — uses XDDFChart for real embedded charts
- * PDF:  android.graphics.pdf.PdfDocument — pie / bar / line charts drawn on Canvas
- */
 object ExportRepository {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     private val dayFmt  = SimpleDateFormat("yyyy-MM-dd",       Locale.getDefault())
     private val monthFmt = SimpleDateFormat("MMM dd",          Locale.getDefault())
 
-    // Default palette used when a category has no colour
     private val palette = listOf(
         "#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336",
         "#00BCD4", "#FFC107", "#795548", "#607D8B", "#E91E63"
     )
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // CSV
-    // ─────────────────────────────────────────────────────────────────────────
 
     fun expensesToCsv(expenses: List<ExpenseTransaction>): String {
         val sb = StringBuilder("name,amount,type,category,date,location\n")
@@ -121,10 +104,6 @@ object ExportRepository {
         }
         return sb.toString()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // JSON
-    // ─────────────────────────────────────────────────────────────────────────
 
     fun expensesToJson(expenses: List<ExpenseTransaction>): String {
         val sorted = expenses.sortedByDescending { it.date }
@@ -184,10 +163,6 @@ object ExportRepository {
         return "[\n  $items\n]"
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // XML
-    // ─────────────────────────────────────────────────────────────────────────
-
 
     fun dashboardsToXml(dashboards: List<Dashboard>, budget: BudgetUiState): String {
         val sb = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dashboards>\n")
@@ -244,7 +219,6 @@ object ExportRepository {
         }
         sb.append("  </categories>\n")
 
-        // Other / Income block — transactions not associated with any budget category.
         val catNames = budget.categories.map { it.name }.toSet()
         val other = expenses.filter { it.category !in catNames }.sortedByDescending { it.date }
         if (other.isNotEmpty()) {
@@ -262,9 +236,6 @@ object ExportRepository {
         return sb.toString()
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // XLSX
-    // ═════════════════════════════════════════════════════════════════════════
 
     fun buildXlsx(
         expenses: List<ExpenseTransaction>,
@@ -309,7 +280,6 @@ object ExportRepository {
         return out.toByteArray()
     }
 
-    /** Bundle of pre-built styles — created once per workbook. */
     private class XlsxStyles(wb: XSSFWorkbook) {
         val title: CellStyle = wb.createCellStyle().apply {
             fillForegroundColor = IndexedColors.DARK_GREEN.index
@@ -368,7 +338,6 @@ object ExportRepository {
         }
     }
 
-    // ── XLSX: Expenses sheet ─────────────────────────────────────────────────
 
     private fun writeExpensesSheet(wb: XSSFWorkbook, s: XlsxStyles, expenses: List<ExpenseTransaction>) {
         val sh = wb.createSheet("Expenses")
@@ -388,13 +357,11 @@ object ExportRepository {
         sh.createFreezePane(0, 1)
     }
 
-    // ── XLSX: Budget summary sheet ───────────────────────────────────────────
 
     private fun writeBudgetSummarySheet(wb: XSSFWorkbook, s: XlsxStyles, budget: BudgetUiState) {
         val sh = wb.createSheet("Budget Summary")
         listOf(7000, 5000, 5000).forEachIndexed { i, w -> sh.setColumnWidth(i, w) }
 
-        // Title row
         val titleRow = sh.createRow(0); titleRow.height = 500
         titleRow.createCell(0).also { it.setCellValue("OVERALL BUDGET SUMMARY"); it.cellStyle =
             s.title as XSSFCellStyle?
@@ -415,9 +382,8 @@ object ExportRepository {
                 it.cellStyle = (if (k == "Remaining" && v < 0) s.redNum else s.num) as XSSFCellStyle?
             }
         }
-        r++ // blank
+        r++
 
-        // Per-category quick view
         sh.writeHeader(r++, s.greenHeader, "Category", "Limit ($)", "Spent ($)")
         budget.categories.forEach { cat ->
             val row = sh.createRow(r++)
@@ -431,7 +397,6 @@ object ExportRepository {
             }
         }
 
-        // Embed an overview pie chart of spent-by-category
         if (budget.categories.any { it.spent > 0 }) {
             val pieFirstRow = r + 2
             val pieDataStartRow = pieFirstRow
@@ -457,7 +422,6 @@ object ExportRepository {
         sh.createFreezePane(0, 3)
     }
 
-    // ── XLSX: By-category sheet ──────────────────────────────────────────────
 
     private fun writeByCategorySheet(
         wb: XSSFWorkbook, s: XlsxStyles,
@@ -469,7 +433,6 @@ object ExportRepository {
         budget.categories.forEach { cat ->
             val pct = if (cat.budget > 0) (cat.spent / cat.budget * 100).toInt() else 0
 
-            // Category header row (merged)
             val hRow = catSh.createRow(row); hRow.height = 500
             hRow.createCell(0).also {
                 it.setCellValue("${cat.name}   |   Limit: \$${fmt2(cat.budget)}   Spent: \$${fmt2(cat.spent)}   ($pct%)")
@@ -477,11 +440,9 @@ object ExportRepository {
             }
             catSh.addMergedRegion(CellRangeAddress(row, row, 0, 4)); row++
 
-            // Inline progress bar (cell-fill bar)
             drawCellBar(catSh, wb, row, pct)
             row++
 
-            // Sub-header
             catSh.writeHeader(row++, s.greenHeader, "Transaction Name", "Amount ($)", "Date", "Location", "")
 
             val txs = expenses.filter { it.category == cat.name && it.amount < 0 }.sortedByDescending { it.date }
@@ -501,7 +462,6 @@ object ExportRepository {
             row += 2
         }
 
-        // Other / Income block
         val catNames = budget.categories.map { it.name }.toSet()
         val other = expenses.filter { it.category !in catNames }.sortedByDescending { it.date }
         if (other.isNotEmpty()) {
@@ -524,7 +484,6 @@ object ExportRepository {
         }
     }
 
-    /** Draw a cell-fill horizontal progress bar across one row. */
     private fun drawCellBar(sh: Sheet, wb: XSSFWorkbook, row: Int, pct: Int) {
         val barRow = sh.createRow(row); barRow.height = 280
         val totalCols = 30
@@ -547,7 +506,6 @@ object ExportRepository {
         }
     }
 
-    // ── XLSX: Dashboard sheet (with REAL embedded charts) ────────────────────
 
     private fun writeDashboardSheet(
         wb: XSSFWorkbook, s: XlsxStyles, dashboard: Dashboard,
@@ -557,7 +515,7 @@ object ExportRepository {
         val sh = wb.createSheet(safeName)
         listOf(7000, 4500, 4500, 4500, 4500, 4500).forEachIndexed { i, w -> sh.setColumnWidth(i, w) }
 
-        // ── Title ────────────────────────────────────────────────────────────
+
         val titleRow = sh.createRow(0); titleRow.height = 600
         titleRow.createCell(0).also { it.setCellValue("DASHBOARD: ${dashboard.name}"); it.cellStyle =
             s.title as XSSFCellStyle?
@@ -570,7 +528,6 @@ object ExportRepository {
 
         var row = 3
 
-        // ── Categories table (always shown — this is what each widget references) ─
         sh.writeHeader(row++, s.greenHeader, "Category", "Limit ($)", "Spent ($)", "Remaining ($)", "Usage %")
         val catDataStart = row
         budget.categories.forEach { cat ->
@@ -599,7 +556,6 @@ object ExportRepository {
             return
         }
 
-        // ── Embed charts — placed to the right of the data area ─────────────
         var anchorRowTop = 2
         val chartHeight = 18
 
@@ -686,7 +642,6 @@ object ExportRepository {
         }
     }
 
-    /** Helper: write a labelled series block and return (firstDataRow, lastDataRow). */
     private fun writeSeries(
         sh: Sheet, startRow: Int,
         labelHdr: String, valueHdr: String,
@@ -703,7 +658,6 @@ object ExportRepository {
         return first to (first + labels.size - 1)
     }
 
-    // ── XDDF chart embedders ─────────────────────────────────────────────────
 
     private fun embedPieChart(
         sh: Sheet, title: String,
@@ -828,9 +782,6 @@ object ExportRepository {
         chart.plot(data)
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PDF
-    // ═════════════════════════════════════════════════════════════════════════
 
     fun buildPdf(
         expenses: List<ExpenseTransaction>,
@@ -839,11 +790,6 @@ object ExportRepository {
         scope: ExportScope
     ): ByteArray = PdfBuilder(expenses, budget, dashboards).build(scope)
 
-    /**
-     * Stateful PDF builder. All canvas draws happen here so we don't have
-     * to juggle higher-order function references with default arguments
-     * (which previously broke ::txt across the buildPdf / drawDashboards seam).
-     */
     private class PdfBuilder(
         val expenses: List<ExpenseTransaction>,
         val budget: BudgetUiState,
@@ -875,7 +821,6 @@ object ExportRepository {
         private var y = mg + 20f
 
         fun build(scope: ExportScope): ByteArray {
-            // Header
             cv.drawText("Smart Expense Tracker", mg, y, titleP); y += lh + 6
             cv.drawText("${scope.label}   |   ${dayFmt.format(Date())}", mg, y, smallP); y += lh
             divider(); gap(4f)
@@ -893,7 +838,6 @@ object ExportRepository {
             return out.toByteArray()
         }
 
-        // ── Page / layout helpers ────────────────────────────────────────────
 
         private fun newPage() {
             pdf.finishPage(page); pageNum++
@@ -904,8 +848,6 @@ object ExportRepository {
         private fun text(t: String, p: Paint, x: Float = mg) { ensureSpace(); cv.drawText(t, x, y, p); y += lh }
         private fun divider() { ensureSpace(10f); cv.drawLine(mg, y, pageW - mg, y, lineP); y += 9f }
         private fun gap(n: Float = 6f) { y += n }
-
-        // ── Sections ─────────────────────────────────────────────────────────
 
         private fun renderExpensesOnly() {
             text("Transactions  (${expenses.size})", secP); gap(4f)
@@ -961,7 +903,6 @@ object ExportRepository {
                 gap(6f); divider()
             }
 
-            // Other / Income
             val catNames = budget.categories.map { it.name }.toSet()
             val other = expenses.filter { it.category !in catNames }.sortedByDescending { it.date }
             if (other.isNotEmpty()) {
@@ -1055,12 +996,9 @@ object ExportRepository {
             }
         }
 
-        // ── PDF chart drawing ────────────────────────────────────────────────
 
-        /** Horizontal progress bar (single-cat utilisation). */
         private fun drawProgressBar(catColor: String, pct: Int) {
             ensureSpace(20f)
-            // Mic gap înainte de bară pentru a o separa vizual de header.
             y += 4f
             val barW = pageW - mg * 2 - 16f
             val bgP = Paint().apply {
@@ -1080,11 +1018,9 @@ object ExportRepository {
             cv.drawRoundRect(bgR, 4f, 4f, bgP)
             val fillW = barW * (pct.coerceIn(0, 100) / 100f)
             if (fillW > 0) cv.drawRoundRect(RectF(mg + 8f, y, mg + 8f + fillW, y + 9f), 4f, 4f, fillP)
-            // Mai mult spațiu după bară pentru a nu se suprapune cu prima tranzacție.
             y += 18f
         }
 
-        /** Real pie chart (filled wedges + side legend). */
         private fun drawPieChart(categories: List<CategoryBudgetView>) {
             val cats = categories.filter { it.spent > 0 }
             if (cats.isEmpty()) { text("(no spending yet)", smallP, mg + 12f); return }
@@ -1108,7 +1044,6 @@ object ExportRepository {
                     isAntiAlias = true
                 }
                 cv.drawArc(rect, startAngle, sweep, true, arcP)
-                // White separator
                 val borderP = Paint().apply {
                     this.color = android.graphics.Color.WHITE
                     style = Paint.Style.STROKE; strokeWidth = 2f; isAntiAlias = true
@@ -1117,7 +1052,6 @@ object ExportRepository {
                 startAngle += sweep
             }
 
-            // Legend
             val lx = cx + r + 30f
             var ly = y + 8f
             cats.take(8).forEachIndexed { i, cat ->
@@ -1133,7 +1067,6 @@ object ExportRepository {
             y = max(cy + r + 10f, ly + 4f)
         }
 
-        /** Grouped bar chart: limit (light) vs spent (dark) for each category. */
         private fun drawGroupedBarChart(categories: List<CategoryBudgetView>) {
             val cats = categories.take(8)
             if (cats.isEmpty()) { text("(no categories)", smallP, mg + 12f); return }
@@ -1151,7 +1084,6 @@ object ExportRepository {
             val groupW = width / cats.size
             val barW = (groupW - 6f) / 2f
 
-            // Axis
             val axisP = Paint().apply {
                 color = android.graphics.Color.parseColor("#888888")
                 strokeWidth = 1f; isAntiAlias = true
@@ -1159,7 +1091,6 @@ object ExportRepository {
             cv.drawLine(left, bottom, right, bottom, axisP)
             cv.drawLine(left, top, left, bottom, axisP)
 
-            // Y-axis labels (4 ticks)
             for (i in 0..4) {
                 val v = maxV * i / 4f
                 val ty = bottom - (chartH * i / 4f)
@@ -1185,11 +1116,9 @@ object ExportRepository {
                 cv.drawRect(cx, bottom - limitH, cx + barW, bottom, limitP)
                 cv.drawRect(cx + barW + 2f, bottom - spentH, cx + 2 * barW + 2f, bottom, spentP)
 
-                // X label
                 cv.drawText(cat.name.take(8), cx, bottom + 12f, smallP)
             }
 
-            // Mini legend
             val legX = right - 100f
             val legY = top + 8f
             val swatchA = Paint().apply { color = android.graphics.Color.parseColor("#C8E6C9"); style = Paint.Style.FILL }
@@ -1202,7 +1131,6 @@ object ExportRepository {
             y = bottom + 22f
         }
 
-        /** Single-series vertical bar chart. */
         private fun drawValueBarChart(labels: List<String>, values: List<Double>) {
             if (labels.isEmpty()) return
             val chartH = 150f
@@ -1243,7 +1171,6 @@ object ExportRepository {
                 cv.drawRect(cx, bottom - h, cx + barW, bottom, barP)
             }
 
-            // X labels — only show every Nth so they don't overlap
             val step = max(1, values.size / 8)
             for (i in values.indices step step) {
                 val cx = left + barSlot * i + (barSlot - barW) / 2f
@@ -1253,7 +1180,6 @@ object ExportRepository {
             y = bottom + 22f
         }
 
-        /** Smooth-ish line chart for time series. */
         private fun drawLineChart(labels: List<String>, values: List<Double>) {
             if (labels.isEmpty()) return
             val chartH = 150f
@@ -1284,7 +1210,6 @@ object ExportRepository {
             val n = values.size
             val dx = if (n > 1) width / (n - 1) else 0f
 
-            // Area fill
             val path = Path()
             path.moveTo(left, bottom)
             values.forEachIndexed { i, v ->
@@ -1300,7 +1225,6 @@ object ExportRepository {
             }
             cv.drawPath(path, areaP)
 
-            // Line
             val lineDraw = Paint().apply {
                 color = android.graphics.Color.parseColor("#2E7D32")
                 style = Paint.Style.STROKE; strokeWidth = 2.5f; isAntiAlias = true
@@ -1332,11 +1256,6 @@ object ExportRepository {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Shared helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /** Daily series usable by both PDF and XLSX sides. */
     private fun buildDailySeries(expenses: List<ExpenseTransaction>, days: Int): Pair<List<String>, List<Double>> {
         val cal = Calendar.getInstance()
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
@@ -1375,7 +1294,6 @@ object ExportRepository {
     private fun String.json() = replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n")
     private fun String.csv()  = replace("\"","\"\"")
 
-    /** Curăță numele unui sheet Excel — elimină caracterele interzise: : \ / ? * [ ] */
     private fun String.sanitizeSheetName(): String =
         replace(Regex("[:\\\\/?*\\[\\]]"), " ").trim().ifEmpty { "Sheet" }
 }

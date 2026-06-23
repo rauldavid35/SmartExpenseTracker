@@ -2,7 +2,6 @@ package com.example.smartexpensetracker.model
 
 import androidx.compose.ui.graphics.Color
 
-// ─── Dashboard Widget Types ────────────────────────────────────────────────────
 
 enum class WidgetType(val displayName: String, val description: String) {
     PIE_CHART("Spending by Category", "Pie chart breakdown of categories"),
@@ -13,15 +12,13 @@ enum class WidgetType(val displayName: String, val description: String) {
     MONTHLY_TREND("Monthly Trend", "Line of spending day by day")
 }
 
-// ─── Persisted Dashboard Definition ───────────────────────────────────────────
 
 data class Dashboard(
     val id: String,
     val name: String,
-    val widgets: List<WidgetType>   // ordered list of widgets on this dashboard
+    val widgets: List<WidgetType>
 )
 
-// ─── Runtime chart data helpers ────────────────────────────────────────────────
 
 data class PieSlice(val label: String, val value: Float, val color: Color)
 

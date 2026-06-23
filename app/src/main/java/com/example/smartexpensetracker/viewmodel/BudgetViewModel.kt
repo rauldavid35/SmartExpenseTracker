@@ -26,8 +26,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
-// ─── Export options ────────────────────────────────────────────────────────────
-
 enum class ExportFormat { CSV, JSON, XML, XLSX, PDF }
 
 enum class ExportScope(val label: String) {
@@ -37,8 +35,6 @@ enum class ExportScope(val label: String) {
     EVERYTHING("Everything (full + dashboards)")
 }
 
-// ─── ViewModel ────────────────────────────────────────────────────────────────
-
 class BudgetViewModel(
     private val context: Context
 ) : ViewModel() {
@@ -47,10 +43,7 @@ class BudgetViewModel(
     private val budgetRepository = BudgetRepository()
     private val expensesRepository = ExpensesRepository()
 
-    // Recreated whenever the signed-in user changes
     private var dashboardRepository = DashboardRepository(context, auth.currentUser?.uid ?: "local")
-
-    // ── Budget state ──────────────────────────────────────────────────────────
 
     private val _expenses        = MutableStateFlow<List<ExpenseTransaction>>(emptyList())
     private val _budgetConfig    = MutableStateFlow<MonthlyBudget?>(null)
@@ -94,16 +87,10 @@ class BudgetViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BudgetUiState())
 
-    // Expose raw expenses for export / charts
     val expenses: StateFlow<List<ExpenseTransaction>> = _expenses.asStateFlow()
 
-    // ── Dashboard state ───────────────────────────────────────────────────────
-
-    // Backed by a MutableStateFlow so we can swap the source when the user changes
     private val _dashboards = MutableStateFlow<List<Dashboard>>(emptyList())
     val dashboards: StateFlow<List<Dashboard>> = _dashboards.asStateFlow()
-
-    // ── Init ──────────────────────────────────────────────────────────────────
 
     init {
         val _authUid = MutableStateFlow(auth.currentUser?.uid)
@@ -114,7 +101,6 @@ class BudgetViewModel(
 
         viewModelScope.launch {
             _authUid.collect { uid ->
-                // Clear stale state from the previous account
                 _expenses.value          = emptyList()
                 _budgetConfig.value      = null
                 _categorySettings.value  = emptyList()
@@ -127,7 +113,6 @@ class BudgetViewModel(
     }
 
     private fun startListening(userId: String) {
-        // Recreate dashboard repository for this user so it reads the correct prefs file
         dashboardRepository = DashboardRepository(context, userId)
 
         viewModelScope.launch {
@@ -154,8 +139,6 @@ class BudgetViewModel(
             } catch (_: Exception) {}
         }
     }
-
-    // ── Budget operations ─────────────────────────────────────────────────────
 
     fun updateMonthlyLimit(newLimit: Double) {
         val userId = auth.currentUser?.uid ?: return
@@ -184,8 +167,6 @@ class BudgetViewModel(
             .coerceAtLeast(0.0)
     }
 
-    // ── Dashboard CRUD ────────────────────────────────────────────────────────
-
     fun createDashboard(name: String, widgets: List<WidgetType>) {
         dashboardRepository.createDashboard(name, widgets)
     }
@@ -199,14 +180,11 @@ class BudgetViewModel(
         dashboardRepository.updateDashboard(existing.copy(widgets = newOrder))
     }
 
-    // ── Export ────────────────────────────────────────────────────────────────
-
     fun buildExportIntent(
         context: Context,
         format: ExportFormat,
         scope: ExportScope
     ) {
-        // Recompute state fresh — uiState.value may be stale because of WhileSubscribed.
         val exp      = _expenses.value
         val budgetCfg = _budgetConfig.value
         val settings = _categorySettings.value
@@ -283,7 +261,6 @@ class BudgetViewModel(
             ExportScope.FULL_REPORT   -> ExportRepository.fullReportToXml(exp, state)
             ExportScope.DASHBOARDS    -> ExportRepository.dashboardsToXml(dashboards.value, state)
             ExportScope.EVERYTHING    -> {
-                // Combine full report + dashboards under a single root element.
                 val full = ExportRepository.fullReportToXml(exp, state)
                     .replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n", "")
                 val dash = ExportRepository.dashboardsToXml(dashboards.value, state)
@@ -292,7 +269,6 @@ class BudgetViewModel(
             }
         }
 
-    // ── Factory ───────────────────────────────────────────────────────────────
 
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -300,10 +276,6 @@ class BudgetViewModel(
             BudgetViewModel(context) as T
     }
 
-    /**
-     * Recompute BudgetUiState directly from raw flows, bypassing the WhileSubscribed
-     * delay of the StateFlow. Used by export to ensure data is fresh.
-     */
     private fun buildBudgetUiStateForExport(
         expenses: List<ExpenseTransaction>,
         budgetConfig: MonthlyBudget?,

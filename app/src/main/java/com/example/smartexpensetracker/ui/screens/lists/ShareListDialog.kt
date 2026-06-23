@@ -29,12 +29,6 @@ import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.viewmodel.SharedListsViewModel
 
-/**
- * Share dialog: shows an invite code + an "invite by email" section.
- *
- * The code is generated on first display and can be regenerated with the
- * refresh button. The dialog closes only when the user taps Done.
- */
 @Composable
 fun ShareListDialog(
     list: SharedListData,
@@ -45,7 +39,6 @@ fun ShareListDialog(
     val code by viewModel.lastGeneratedCode.collectAsState()
     var emailInput by remember { mutableStateOf("") }
 
-    // Generate the first code when the dialog opens. Cleared on dismiss.
     LaunchedEffect(list.id) {
         viewModel.clearGeneratedCode()
         viewModel.generateInviteCode(list)
@@ -78,7 +71,6 @@ fun ShareListDialog(
 
                 Spacer(Modifier.height(20.dp))
 
-                // ── Code card ────────────────────────────────────────────────
                 Surface(
                     color = LightMint,
                     shape = RoundedCornerShape(14.dp),
@@ -112,7 +104,6 @@ fun ShareListDialog(
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Code actions ────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -145,7 +136,6 @@ fun ShareListDialog(
                 HorizontalDivider(color = TextSecondary.copy(alpha = 0.2f))
                 Spacer(Modifier.height(20.dp))
 
-                // ── Email invite ────────────────────────────────────────────
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Email, null, tint = PrimaryGreen)
                     Spacer(Modifier.width(8.dp))
@@ -177,7 +167,6 @@ fun ShareListDialog(
 
                 Spacer(Modifier.height(20.dp))
 
-                // ── Done ────────────────────────────────────────────────────
                 TextButton(
                     onClick = {
                         viewModel.clearGeneratedCode()

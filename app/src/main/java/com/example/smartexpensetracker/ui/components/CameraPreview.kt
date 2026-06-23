@@ -53,10 +53,9 @@ fun CameraPreview(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
-                        imageCapture // Bind the capture use case
+                        imageCapture
                     )
                 } catch (exc: Exception) {
-                    // Handle error
                 }
             }, ContextCompat.getMainExecutor(ctx))
 
@@ -65,7 +64,6 @@ fun CameraPreview(
     )
 }
 
-// Helper function to capture and save image
 fun takePhoto(
     imageCapture: ImageCapture,
     executor: Executor,

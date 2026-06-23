@@ -28,7 +28,6 @@ fun ListDetailScreen(
     onBackClick: () -> Unit,
     viewModel: ListsViewModel = viewModel()
 ) {
-    // Load items for this specific list
     LaunchedEffect(listId) {
         viewModel.fetchListItems(listId)
     }
@@ -41,7 +40,6 @@ fun ListDetailScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -58,7 +56,6 @@ fun ListDetailScreen(
             )
         }
 
-        // Add Item Input
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -89,7 +86,6 @@ fun ListDetailScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Items List
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -106,7 +102,6 @@ fun ListDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
-                            // UPDATED: Use .checked instead of .isChecked
                             checked = item.checked,
                             onCheckedChange = { isChecked ->
                                 viewModel.toggleListItem(listId, item.id, isChecked)
@@ -117,7 +112,6 @@ fun ListDetailScreen(
                         Text(
                             text = item.text,
                             style = MaterialTheme.typography.bodyLarge.copy(
-                                // UPDATED: Use .checked
                                 textDecoration = if (item.checked) TextDecoration.LineThrough else null,
                                 color = if (item.checked) Color.Gray else Color.Black
                             ),

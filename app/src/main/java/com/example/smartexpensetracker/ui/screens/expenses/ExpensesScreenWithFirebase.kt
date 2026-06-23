@@ -99,7 +99,6 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
-    // ── Standard UI state ─────────────────────────────────────────────────────
     var showAddDialog        by remember { mutableStateOf(false) }
     var showLocationDialog   by remember { mutableStateOf(false) }
     var showCamera           by remember { mutableStateOf(false) }
@@ -108,11 +107,9 @@ fun ExpensesScreenWithFirebase(
     var showVoiceInput       by remember { mutableStateOf(false) }
     var isReceiptMode        by remember { mutableStateOf(true) }
 
-    // ── Voice state ───────────────────────────────────────────────────────────
     var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
     var isVoiceParsing   by remember { mutableStateOf(false) }
 
-    // ── Location / Photon state ───────────────────────────────────────────────
     val searchResults      by viewModel.searchResults.collectAsState()
     val currentSearchQuery by viewModel.searchQuery.collectAsState()
     var useCurrentLocation by remember { mutableStateOf(true) }
@@ -120,7 +117,6 @@ fun ExpensesScreenWithFirebase(
     var lng          by remember { mutableStateOf(0.0) }
     var locationName by remember { mutableStateOf("") }
 
-    // ── Form data ─────────────────────────────────────────────────────────────
     var name                 by remember { mutableStateOf("") }
     var amount               by remember { mutableStateOf("") }
     var scannedItems by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
@@ -133,19 +129,13 @@ fun ExpensesScreenWithFirebase(
     var showAnomalyDialog by remember { mutableStateOf(false) }
     var anomalyAverage    by remember { mutableStateOf(0.0) }
 
-    // ── Product scan state ────────────────────────────────────────────────────
     var productScanResult     by remember { mutableStateOf<ProductResult?>(null) }
     var showProductScanDialog by remember { mutableStateOf(false) }
 
-    // Location consent for product scan:
-    //   null  = not yet asked → show the consent dialog
-    //   true  = user allowed → resolve GPS → local stores
-    //   false = user declined → international stores (Amazon, eBay)
     var locationConsentGranted    by remember { mutableStateOf<Boolean?>(null) }
     var showLocationConsentDialog by remember { mutableStateOf(false) }
     var pendingProductUri         by remember { mutableStateOf<Uri?>(null) }
 
-    // ── External triggers (shake / volume keys) ───────────────────────────────
     LaunchedEffect(externalVoiceTrigger) {
         if (externalVoiceTrigger) { showVoiceInput = true; onExternalTriggerHandled() }
     }
@@ -157,7 +147,6 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
-    // ── Voice parsing ─────────────────────────────────────────────────────────
     fun processVoiceCommand(transcript: String) {
         if (transcript.isBlank()) { voiceParseResult = null; isVoiceParsing = false; return }
         isVoiceParsing = true; voiceParseResult = null
@@ -167,9 +156,6 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
-    // ── Product scan launcher ─────────────────────────────────────────────────
-    // Resolves GPS → countryIso via Geocoder, then calls the updated processImage.
-    // Called after the user answers the consent dialog AND from the camera shutter.
     fun launchProductScan(uri: Uri) {
         isProcessingAI = true
         scope.launch {
@@ -180,11 +166,11 @@ fun ExpensesScreenWithFirebase(
                         @Suppress("DEPRECATION")
                         val addresses = Geocoder(context, Locale.ENGLISH)
                             .getFromLocation(coords.first, coords.second, 1)
-                        addresses?.firstOrNull()?.countryCode   // e.g. "RO"
+                        addresses?.firstOrNull()?.countryCode
                     } else null
                 } catch (e: Exception) { null }
             } else {
-                null  // declined → international
+                null
             }
 
             processImage(
@@ -194,8 +180,8 @@ fun ExpensesScreenWithFirebase(
                 geminiParser      = geminiParser,
                 scope             = scope,
                 countryIso        = resolvedCountryIso,
-                onLoading         = { /* already set above */ },
-                onReceiptComplete = { _, _, _, _, _ -> },  // not used in product mode
+                onLoading         = {  },
+                onReceiptComplete = { _, _, _, _, _ -> },
                 onProductComplete = { result ->
                     isProcessingAI = false
                     if (result != null) {
@@ -210,14 +196,12 @@ fun ExpensesScreenWithFirebase(
         }
     }
 
-    // ── Gallery launcher ──────────────────────────────────────────────────────
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
 
         if (!isReceiptMode) {
-            // Product scan → ask for location consent once, then scan
             pendingProductUri = uri
             if (locationConsentGranted == null) {
                 showLocationConsentDialog = true
@@ -225,7 +209,6 @@ fun ExpensesScreenWithFirebase(
                 launchProductScan(uri)
             }
         } else {
-            // Receipt scan → straight through, no consent needed
             processImage(
                 context           = context,
                 uri               = uri,
@@ -249,14 +232,10 @@ fun ExpensesScreenWithFirebase(
     val totalExpenses = expenses.filter { it.amount < 0 }.sumOf { -it.amount }
     val totalIncome   = expenses.filter { it.amount > 0 }.sumOf { it.amount }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // UI
-    // ─────────────────────────────────────────────────────────────────────────
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-            // Top Bar
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -301,7 +280,6 @@ fun ExpensesScreenWithFirebase(
                 }
             }
 
-            // Summary cards
             Row(modifier = Modifier.padding(16.dp)) {
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -322,7 +300,6 @@ fun ExpensesScreenWithFirebase(
                 CircularProgressIndicator()
             }
 
-            // Expense list
             LazyColumn(
                 contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -337,7 +314,6 @@ fun ExpensesScreenWithFirebase(
                     val prevMonth = if (index > 0) monthKey.format(Date(expenses[index - 1].date)) else null
 
                     Column {
-                        // Separator de lună: apare deasupra primului expense dintr-o lună nouă
                         if (prevMonth != txMonth) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -404,9 +380,7 @@ fun ExpensesScreenWithFirebase(
             }
         }
 
-        // ── DIALOGS ───────────────────────────────────────────────────────────
 
-        // Voice input
         if (showVoiceInput) {
             VoiceInputDialog(
                 mode          = VoiceParseMode.EXPENSE,
@@ -428,7 +402,6 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Location consent — shown once before the first product scan
         if (showLocationConsentDialog) {
             LocationConsentDialog(
                 onAllow = {
@@ -442,7 +415,6 @@ fun ExpensesScreenWithFirebase(
                     pendingProductUri?.let { launchProductScan(it) }
                 },
                 onDismiss = {
-                    // Treat dismiss as decline so the scan still proceeds
                     locationConsentGranted    = false
                     showLocationConsentDialog = false
                     pendingProductUri?.let { launchProductScan(it) }
@@ -450,7 +422,6 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Product scan result
         if (showProductScanDialog && productScanResult != null) {
             ProductScanDialog(
                 result = productScanResult!!,
@@ -467,7 +438,6 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Add / Edit expense form
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; selectedExpense = null; scannedItems = emptyList() },
@@ -489,55 +459,114 @@ fun ExpensesScreenWithFirebase(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        // ── Expense / Income toggle ───────────────────────────────────
 
-                        if (scannedItems.isNotEmpty()) {
-                            Text(
-                                "Detected Items",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = PrimaryGreen
-                            )
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(8.dp)
-                                        .heightIn(max = 140.dp)
-                                        .verticalScroll(rememberScrollState())
-                                ) {
-                                    scannedItems.forEach { (itemName, itemPrice) ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                itemName,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            if (itemPrice > 0) {
+                        var newItemName by remember { mutableStateOf("") }
+                        var newItemPrice by remember { mutableStateOf("") }
+
+                        Text(
+                            "Items (optional)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PrimaryGreen
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+
+                                if (scannedItems.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .heightIn(max = 140.dp)
+                                            .verticalScroll(rememberScrollState())
+                                    ) {
+                                        scannedItems.forEachIndexed { index, (itemName, itemPrice) ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Text(
-                                                    String.format("%.2f", itemPrice),
+                                                    itemName,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = PrimaryGreen
+                                                    modifier = Modifier.weight(1f)
                                                 )
+                                                if (itemPrice > 0) {
+                                                    Text(
+                                                        String.format("%.2f", itemPrice),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = PrimaryGreen,
+                                                        modifier = Modifier.padding(end = 4.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        scannedItems = scannedItems.toMutableList().apply { removeAt(index) }
+                                                    },
+                                                    modifier = Modifier.size(20.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = "Remove item",
+                                                        tint = TextSecondary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = newItemName,
+                                        onValueChange = { newItemName = it },
+                                        label = { Text("Item name", style = MaterialTheme.typography.bodySmall) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(2f),
+                                        textStyle = MaterialTheme.typography.bodySmall
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    OutlinedTextField(
+                                        value = newItemPrice,
+                                        onValueChange = { newItemPrice = it },
+                                        label = { Text("Price", style = MaterialTheme.typography.bodySmall) },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        textStyle = MaterialTheme.typography.bodySmall
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = {
+                                            val price = newItemPrice.toDoubleOrNull() ?: 0.0
+                                            scannedItems = scannedItems + (newItemName.trim() to price)
+                                            newItemName = ""
+                                            newItemPrice = ""
+                                        },
+                                        enabled = newItemName.trim().isNotEmpty(),
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Add item",
+                                            tint = if (newItemName.trim().isNotEmpty()) PrimaryGreen else TextSecondary
+                                        )
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = isExpense,
                                 onCheckedChange = { nowExpense ->
                                     isExpense = nowExpense
-                                    // Reset to "Income" when switching to income so no
-                                    // budget category is accidentally pre-selected.
                                     if (!nowExpense) selectedCategoryName = "Income"
                                 }
                             )
@@ -545,7 +574,6 @@ fun ExpensesScreenWithFirebase(
                         }
 
                         if (isExpense) {
-                            // ── EXPENSE: mandatory category picker (unchanged) ────────────
                             Spacer(modifier = Modifier.height(8.dp))
                             var expanded by remember { mutableStateOf(false) }
                             var showNewCategoryField by remember { mutableStateOf(false) }
@@ -625,17 +653,9 @@ fun ExpensesScreenWithFirebase(
                             }
 
                         } else {
-                            // ── INCOME: optional category budget boost ────────────────────
-                            //
-                            // Income ALWAYS boosts the general budget total automatically.
-                            // The user can OPTIONALLY also pick a specific budget category
-                            // to extend that category's spending limit by this income amount.
-                            //
-                            // selectedCategoryName == "Income"   → general budget only
-                            // selectedCategoryName == <cat name> → general budget + that category limit
+
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Info hint card
                             Card(
                                 colors   = CardDefaults.cardColors(containerColor = LightMint),
                                 shape    = RoundedCornerShape(10.dp),
@@ -663,7 +683,6 @@ fun ExpensesScreenWithFirebase(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Optional category boost dropdown
                             var incomeExpanded by remember { mutableStateOf(false) }
                             val noneLabel = "General budget only"
                             val displayValue = if (selectedCategoryName == "Income") noneLabel else selectedCategoryName
@@ -684,7 +703,6 @@ fun ExpensesScreenWithFirebase(
                                     expanded         = incomeExpanded,
                                     onDismissRequest = { incomeExpanded = false }
                                 ) {
-                                    // "None" — general budget only
                                     DropdownMenuItem(
                                         text = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -701,7 +719,6 @@ fun ExpensesScreenWithFirebase(
                                         onClick = { selectedCategoryName = "Income"; incomeExpanded = false }
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                    // All budget categories except "Income" itself
                                     availableCategories.filter { it != "Income" }.forEach { cat ->
                                         DropdownMenuItem(
                                             text    = { Text(cat) },
@@ -711,7 +728,6 @@ fun ExpensesScreenWithFirebase(
                                 }
                             }
 
-                            // Confirmation hint when a category is chosen
                             if (selectedCategoryName != "Income") {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
@@ -748,10 +764,6 @@ fun ExpensesScreenWithFirebase(
                                         return@launch
                                     }
 
-                                    // Reset coords — GPS is only fetched inside the location
-                                    // dialog if the user explicitly picks "Use GPS".
-                                    // This prevents real coordinates from leaking into
-                                    // transactions where the user chose "Skip" or "Search".
                                     lat = 0.0; lng = 0.0; locationName = ""
 
                                     if (isExpense && amountVal > 0) {
@@ -774,15 +786,9 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Location dialog
-        // Location / Photon dialog
         if (showLocationDialog) {
-            // locationMode:
-            //   "gps"    → fetch current GPS on Save
-            //   "search" → Photon text search, optionally biased to vicinity
-            //   "skip"   → save with lat=0, lng=0 (excluded from heatmap)
             var locationMode    by remember { mutableStateOf("skip") }
-            var searchNearMe    by remember { mutableStateOf(false) }   // vicinity toggle
+            var searchNearMe    by remember { mutableStateOf(false) }
             var isFetchingGps   by remember { mutableStateOf(false) }
             var isLoadingVicinity by remember { mutableStateOf(false) }
 
@@ -797,7 +803,6 @@ fun ExpensesScreenWithFirebase(
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
 
-                        // ── Option 1: GPS ────────────────────────────────────
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -818,7 +823,6 @@ fun ExpensesScreenWithFirebase(
                             }
                         }
 
-                        // ── Option 2: Search ─────────────────────────────────
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -839,7 +843,6 @@ fun ExpensesScreenWithFirebase(
                         if (locationMode == "search") {
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // ── "Search near me" vicinity toggle ─────────────
                             Card(
                                 colors   = CardDefaults.cardColors(containerColor = LightMint),
                                 shape    = RoundedCornerShape(10.dp),
@@ -856,7 +859,6 @@ fun ExpensesScreenWithFirebase(
                                         onCheckedChange = { wantNearby ->
                                             searchNearMe = wantNearby
                                             if (wantNearby) {
-                                                // Fetch GPS once to bias Photon – user opted in
                                                 isLoadingVicinity = true
                                                 scope.launch {
                                                     val coords = locationHelper.getCurrentLocation()
@@ -864,14 +866,12 @@ fun ExpensesScreenWithFirebase(
                                                         viewModel.updateLastLocation(coords.first, coords.second)
                                                     }
                                                     isLoadingVicinity = false
-                                                    // Re-trigger search with new coords
                                                     if (currentSearchQuery.length >= 3) {
                                                         viewModel.onSearchQueryChanged(currentSearchQuery + " ")
                                                         viewModel.onSearchQueryChanged(currentSearchQuery)
                                                     }
                                                 }
                                             } else {
-                                                // Reset to global (0,0)
                                                 viewModel.updateLastLocation(0.0, 0.0)
                                             }
                                         },
@@ -947,7 +947,6 @@ fun ExpensesScreenWithFirebase(
                             }
                         }
 
-                        // ── Option 3: Skip ───────────────────────────────────
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -970,8 +969,6 @@ fun ExpensesScreenWithFirebase(
                     }
                 },
                 confirmButton = {
-                    // Disable Save while GPS/vicinity is loading, or if Search
-                    // is selected but no result has been tapped yet.
                     val saveEnabled = !isFetchingGps && !isLoadingVicinity &&
                             (locationMode != "search" || (lat != 0.0 && locationName.isNotBlank()))
 
@@ -994,7 +991,6 @@ fun ExpensesScreenWithFirebase(
                                         }
                                     }
                                     "skip" -> { lat = 0.0; lng = 0.0; locationName = "" }
-                                    // "search": lat/lng/locationName already set by the row tap
                                 }
                                 saveTransaction(
                                     viewModel       = viewModel,
@@ -1014,7 +1010,6 @@ fun ExpensesScreenWithFirebase(
                                 selectedExpense    = null
                                 name = ""; amount = ""; selectedCategoryName = "General"
                                 viewModel.clearLocationSearch()
-                                // Reset vicinity bias so next transaction starts clean
                                 viewModel.updateLastLocation(0.0, 0.0)
                             }
                         },
@@ -1037,7 +1032,6 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // Scanned text fallback
         if (showScannedTextDialog) {
             AlertDialog(
                 onDismissRequest = { showScannedTextDialog = false },
@@ -1054,14 +1048,26 @@ fun ExpensesScreenWithFirebase(
                 },
                 confirmButton = {
                     Button(onClick = {
-                        // Numele NU se completează automat — user-ul îl alege.
-                        // Textul OCR e împărțit pe linii și pus în lista de items (informativ).
+
+                        val priceRegex = Regex("""(\d+[.,]\d{2})\s*(RON|LEI|USD|EUR|\$|€|£)?\s*$""", RegexOption.IGNORE_CASE)
+
                         name = ""
                         scannedItems = scannedRawText
                             .lines()
                             .map { it.trim() }
                             .filter { it.isNotBlank() }
-                            .map { line -> line to 0.0 }
+                            .map { line ->
+                                val match = priceRegex.find(line)
+                                if (match != null) {
+                                    val priceStr = match.groupValues[1].replace(",", ".")
+                                    val price = priceStr.toDoubleOrNull() ?: 0.0
+                                    val cleanName = line.substring(0, match.range.first).trim()
+                                        .removeSuffix("-").removeSuffix(":").trim()
+                                    if (cleanName.isNotEmpty()) cleanName to price else line to 0.0
+                                } else {
+                                    line to 0.0
+                                }
+                            }
                         showScannedTextDialog = false
                         showAddDialog = true
                     }) {
@@ -1071,7 +1077,6 @@ fun ExpensesScreenWithFirebase(
             )
         }
 
-        // AI loading spinner
         if (isProcessingAI) {
             Dialog(onDismissRequest = {}) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
@@ -1084,7 +1089,6 @@ fun ExpensesScreenWithFirebase(
             }
         }
 
-        // Camera overlay
         if (showCamera) {
             Dialog(
                 onDismissRequest = { showCamera = false },
@@ -1093,7 +1097,6 @@ fun ExpensesScreenWithFirebase(
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                     CameraPreview(modifier = Modifier.fillMaxSize(), imageCapture = imageCapture)
 
-                    // Receipt / Product toggle
                     Row(
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
                             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
@@ -1112,19 +1115,16 @@ fun ExpensesScreenWithFirebase(
                         ) { Icon(Icons.Default.ShoppingBag, null, modifier = Modifier.size(16.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Product") }
                     }
 
-                    // Bottom controls
                     Row(
                         modifier              = Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        // Gallery button — same consent logic as direct gallery launch
                         IconButton(
                             onClick  = { galleryLauncher.launch("image/*") },
                             modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.2f), CircleShape)
                         ) { Icon(Icons.Default.Image, "Gallery", tint = Color.White) }
 
-                        // Shutter
                         Box(
                             modifier         = Modifier.size(80.dp).border(4.dp, Color.White, CircleShape).clickable {
                                 takePhoto(
@@ -1133,7 +1133,6 @@ fun ExpensesScreenWithFirebase(
                                     onImageCaptured = { uri ->
                                         showCamera = false
                                         if (!isReceiptMode) {
-                                            // Product mode — go through consent flow
                                             pendingProductUri = uri
                                             if (locationConsentGranted == null) {
                                                 showLocationConsentDialog = true
@@ -1141,7 +1140,6 @@ fun ExpensesScreenWithFirebase(
                                                 launchProductScan(uri)
                                             }
                                         } else {
-                                            // Receipt mode — straight through
                                             processImage(
                                                 context           = context,
                                                 uri               = uri,
@@ -1178,7 +1176,6 @@ fun ExpensesScreenWithFirebase(
             }
         }
 
-        // Anomaly warning
         if (showAnomalyDialog) {
             AlertDialog(
                 onDismissRequest = { showAnomalyDialog = false; showAddDialog = true },
@@ -1195,9 +1192,6 @@ fun ExpensesScreenWithFirebase(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// saveTransaction
-// ─────────────────────────────────────────────────────────────────────────────
 
 fun saveTransaction(
     viewModel: ExpensesViewModel, selectedExpense: ExpenseTransaction?,
@@ -1210,15 +1204,6 @@ fun saveTransaction(
     if (selectedExpense != null) viewModel.editExpense(selectedExpense.id, name, finalAmount, category)
     else viewModel.addExpense(name, finalAmount, category, locationName, lat, lng, items)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// processImage — updated signature
-//
-// isReceiptMode = true  → onReceiptComplete callback, onProductComplete ignored
-// isReceiptMode = false → onProductComplete callback, onReceiptComplete ignored
-// countryIso            → null for receipt mode (unused) and for international
-//                         product mode; ISO string (e.g. "RO") for local mode
-// ─────────────────────────────────────────────────────────────────────────────
 
 fun processImage(
     context: Context,

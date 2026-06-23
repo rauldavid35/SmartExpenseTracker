@@ -37,8 +37,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         NetworkMonitor.init(applicationContext)
-
-        // Create notification channels as early as possible
         NotificationHelper.createChannels(this)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager

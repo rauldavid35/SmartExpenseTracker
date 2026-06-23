@@ -46,12 +46,10 @@ fun ListsScreenWithFirebase(
     var listToEdit by remember { mutableStateOf<ShoppingListData?>(null) }
     var showVoiceInput by remember { mutableStateOf(false) }
 
-    // ── Voice state ───────────────────────────────────────────────────────────
     val voiceParser = remember { VoiceParser(apiKey = com.example.smartexpensetracker.BuildConfig.GEMINI_API_KEY) }
     var voiceParseResult by remember { mutableStateOf<VoiceParseResult?>(null) }
     var isVoiceParsing   by remember { mutableStateOf(false) }
 
-    // External trigger (shake / volume)
     LaunchedEffect(externalVoiceTrigger) {
         if (externalVoiceTrigger) {
             voiceParseResult = null
@@ -61,7 +59,6 @@ fun ListsScreenWithFirebase(
         }
     }
 
-    // ── Parse voice transcript for a shopping list ────────────────────────────
     fun processListVoiceCommand(transcript: String) {
         if (transcript.isBlank()) {
             voiceParseResult = null
@@ -77,7 +74,6 @@ fun ListsScreenWithFirebase(
         }
     }
 
-    // ── Confirm handler: create list + add all items atomically ──────────────
     fun confirmShoppingListResult(result: VoiceParseResult.ShoppingListResult) {
         viewModel.addList(result.listName) { newListId ->
             result.items.forEach { item ->
@@ -88,7 +84,6 @@ fun ListsScreenWithFirebase(
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-        // ── Top Bar ───────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -104,7 +99,6 @@ fun ListsScreenWithFirebase(
             Text("Shopping Lists", style = MaterialTheme.typography.headlineSmall)
 
             Row {
-                // Voice button
                 IconButton(
                     onClick = {
                         voiceParseResult = null
@@ -148,7 +142,6 @@ fun ListsScreenWithFirebase(
         }
         Spacer(Modifier.height(8.dp))
 
-        // ── List of Shopping Lists ────────────────────────────────────────────
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(shoppingLists) { list ->
                 Card(
@@ -183,7 +176,6 @@ fun ListsScreenWithFirebase(
         }
     }
 
-    // ── Voice Input Dialog ────────────────────────────────────────────────────
     if (showVoiceInput) {
         VoiceInputDialog(
             mode         = VoiceParseMode.SHOPPING_LIST,
@@ -208,7 +200,6 @@ fun ListsScreenWithFirebase(
         )
     }
 
-    // ── Manual Add / Rename Dialog ────────────────────────────────────────────
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false; listToEdit = null; newListName = "" },

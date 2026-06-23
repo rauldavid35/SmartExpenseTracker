@@ -28,14 +28,6 @@ import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.viewmodel.SharedListsViewModel
 import com.google.firebase.auth.FirebaseAuth
 
-/**
- * Top-level screen for shared lists.
- *
- * Independent of the personal lists screen — they only share the route layer.
- *
- * When offline, all write actions are disabled visually and ignored functionally.
- * Only checkbox toggles (in detail screen) remain usable offline.
- */
 @Composable
 fun SharedListsScreen(
     onBackClick: () -> Unit,
@@ -57,7 +49,6 @@ fun SharedListsScreen(
     var renameTarget     by remember { mutableStateOf<SharedListData?>(null) }
     var deleteTarget     by remember { mutableStateOf<SharedListData?>(null) }
 
-    // Surface VM messages as Toasts.
     LaunchedEffect(userMessage) {
         userMessage?.let {
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
@@ -67,7 +58,6 @@ fun SharedListsScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-        // ── Top bar ──────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -102,7 +92,6 @@ fun SharedListsScreen(
             }
         }
 
-        // ── Offline banner ───────────────────────────────────────────────────
         if (!isOnline) {
             Surface(
                 color = Color(0xFFFFF3CD),
@@ -128,7 +117,6 @@ fun SharedListsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Pending invites section ─────────────────────────────────────
             if (pendingInvites.isNotEmpty()) {
                 item {
                     Text(
@@ -209,7 +197,6 @@ fun SharedListsScreen(
                 }
             }
 
-            // ── Shared lists ────────────────────────────────────────────────
             if (sharedLists.isEmpty()) {
                 item {
                     Box(
@@ -307,7 +294,6 @@ fun SharedListsScreen(
         }
     }
 
-    // ── Dialogs ──────────────────────────────────────────────────────────────
 
     if (showCreateDialog) {
         var name by remember { mutableStateOf("") }

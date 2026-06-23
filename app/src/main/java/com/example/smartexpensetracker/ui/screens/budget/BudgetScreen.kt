@@ -31,14 +31,12 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
 
-// ─── Tab definition ────────────────────────────────────────────────────────────
 
 private enum class BudgetTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     BUDGET("Budget", Icons.Default.AccountBalanceWallet),
     DASHBOARDS("Dashboards", Icons.Default.Dashboard)
 }
 
-// ─── Main screen ───────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +56,6 @@ fun BudgetScreen(
     var selectedCategory by remember { mutableStateOf<CategoryBudgetView?>(null) }
     var showCreateDashboard by remember { mutableStateOf(false) }
 
-    // Which dashboard is expanded (id)
     var expandedDashboardId by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -67,7 +64,6 @@ fun BudgetScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // ── Top Bar ──────────────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -91,7 +87,6 @@ fun BudgetScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // FAB changes per tab
                 FloatingActionButton(
                     onClick = {
                         if (selectedTab == BudgetTab.BUDGET) {
@@ -107,7 +102,6 @@ fun BudgetScreen(
                 }
             }
 
-            // ── Tabs ─────────────────────────────────────────────────────────
             TabRow(
                 selectedTabIndex = selectedTab.ordinal,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -124,7 +118,6 @@ fun BudgetScreen(
                 }
             }
 
-            // ── Content ───────────────────────────────────────────────────────
             when (selectedTab) {
                 BudgetTab.BUDGET -> BudgetTabContent(
                     uiState = uiState,
@@ -144,8 +137,6 @@ fun BudgetScreen(
             }
         }
     }
-
-    // ── Dialogs ───────────────────────────────────────────────────────────────
 
     if (showEditBudgetDialog) {
         EditBudgetDialog(
@@ -180,8 +171,6 @@ fun BudgetScreen(
     }
 }
 
-// ─── Budget tab ────────────────────────────────────────────────────────────────
-
 @Composable
 private fun BudgetTabContent(
     uiState: BudgetUiState,
@@ -199,7 +188,6 @@ private fun BudgetTabContent(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ── Overview card
         item {
             Card(
                 modifier = Modifier
@@ -250,7 +238,6 @@ private fun BudgetTabContent(
             }
         }
 
-        // ── Categories header
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -266,7 +253,6 @@ private fun BudgetTabContent(
             }
         }
 
-        // ── Categories list
         if (uiState.categories.isEmpty()) {
             item {
                 Column(
@@ -287,7 +273,6 @@ private fun BudgetTabContent(
     }
 }
 
-// ─── Dashboards tab ────────────────────────────────────────────────────────────
 
 @Composable
 private fun DashboardTabContent(
@@ -300,7 +285,6 @@ private fun DashboardTabContent(
     onAdd: () -> Unit
 ) {
     if (dashboards.isEmpty()) {
-        // Empty state
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -343,7 +327,6 @@ private fun DashboardTabContent(
     }
 }
 
-// ─── Single dashboard card ─────────────────────────────────────────────────────
 
 @Composable
 private fun DashboardCard(
@@ -361,7 +344,6 @@ private fun DashboardCard(
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column {
-            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -379,7 +361,6 @@ private fun DashboardCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                // Widget preview chips
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f)
@@ -401,7 +382,6 @@ private fun DashboardCard(
                 )
             }
 
-            // Expanded widget area
             if (expanded) {
                 HorizontalDivider()
                 Column(
@@ -415,7 +395,6 @@ private fun DashboardCard(
                             expenses = expenses
                         )
                     }
-                    // Delete dashboard
                     TextButton(
                         onClick = onDelete,
                         colors = ButtonDefaults.textButtonColors(contentColor = Color.Red),
@@ -431,7 +410,6 @@ private fun DashboardCard(
     }
 }
 
-// ─── Individual widget renderer ────────────────────────────────────────────────
 
 @Composable
 private fun DashboardWidget(
@@ -501,8 +479,6 @@ private fun DashboardWidget(
         }
     }
 }
-
-// ─── Reused dialogs (unchanged from original) ──────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -9,16 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Process-wide network state.
- *
- * Initialize once from MainActivity.onCreate() by calling [NetworkMonitor.init].
- * After that, any ViewModel or composable can observe [isOnline] without
- * needing a Context.
- *
- * Detects validated internet connectivity — i.e. not just "WiFi connected"
- * but "WiFi can actually reach the internet".
- */
 object NetworkMonitor {
 
     private val _isOnline = MutableStateFlow(false)
@@ -33,7 +23,6 @@ object NetworkMonitor {
         val cm = context.applicationContext
             .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        // Seed with current state so we don't start in "offline" wrongly.
         _isOnline.value = currentlyOnline(cm)
 
         val request = NetworkRequest.Builder()
@@ -47,7 +36,6 @@ object NetworkMonitor {
             }
 
             override fun onLost(network: Network) {
-                // Re-check because another network may still be active.
                 _isOnline.value = currentlyOnline(cm)
             }
 

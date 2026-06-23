@@ -54,7 +54,6 @@ fun ExportBottomSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -76,7 +75,6 @@ fun ExportBottomSheet(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── What to export ──────────────────────────────────────────────
 
             Text("What to export", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
@@ -96,12 +94,10 @@ fun ExportBottomSheet(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Format ──────────────────────────────────────────────────────
 
             Text("File format", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
 
-            // Row 1: recommended (XLSX opens in Excel/Sheets, PDF is printable)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ExportFormat.XLSX, ExportFormat.PDF, ExportFormat.CSV).forEach { fmt ->
                     FormatChip(label = fmt.name, subtitle = formatSubtitle(fmt),
@@ -110,7 +106,6 @@ fun ExportBottomSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            // Row 2: developer/data formats
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ExportFormat.JSON, ExportFormat.XML).forEach { fmt ->
                     FormatChip(label = fmt.name, subtitle = formatSubtitle(fmt),
@@ -122,7 +117,6 @@ fun ExportBottomSheet(
 
             Spacer(Modifier.height(28.dp))
 
-            // ── Export button ────────────────────────────────────────────────
 
             Button(
                 onClick = {
@@ -147,8 +141,6 @@ fun ExportBottomSheet(
         }
     }
 }
-
-// ── Row for scope selection ────────────────────────────────────────────────────
 
 @Composable
 private fun ScopeRow(
@@ -183,7 +175,6 @@ private fun ScopeRow(
     }
 }
 
-// ── Format chip ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun FormatChip(
@@ -215,8 +206,6 @@ private fun FormatChip(
         Text(subtitle, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
     }
 }
-
-// ── Metadata helpers ───────────────────────────────────────────────────────────
 
 private fun scopeMeta(scope: ExportScope): Pair<ImageVector, String> = when (scope) {
     ExportScope.EXPENSES_ONLY -> Icons.Default.Receipt to "Raw list of all transactions"

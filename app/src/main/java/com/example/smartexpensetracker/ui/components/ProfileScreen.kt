@@ -61,7 +61,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // ── Top bar ───────────────────────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMenuClick) {
                     Icon(Icons.Default.Menu, null, tint = PrimaryGreen)
@@ -72,7 +71,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Avatar + email ────────────────────────────────────────────────
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -93,7 +91,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(32.dp))
 
-            // ── Currency ──────────────────────────────────────────────────────
             SectionLabel("Preferred Currency")
             ProfileRow(
                 icon   = Icons.Default.AttachMoney,
@@ -104,7 +101,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Security ──────────────────────────────────────────────────────
             SectionLabel("Security")
 
             OutlinedTextField(
@@ -144,7 +140,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Recovery contact ──────────────────────────────────────────────
             SectionLabel("Recovery Contact")
             OutlinedTextField(
                 value         = recoveryContact,
@@ -168,7 +163,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
         }
     }
 
-    // ── Currency picker dialog ────────────────────────────────────────────────
     if (showCurrencyPicker) {
         AlertDialog(
             onDismissRequest = { showCurrencyPicker = false },
@@ -202,7 +196,6 @@ fun ProfileScreen(onMenuClick: () -> Unit) {
     }
 }
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun SectionLabel(text: String) {

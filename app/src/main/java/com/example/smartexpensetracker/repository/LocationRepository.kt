@@ -11,7 +11,6 @@ import java.net.URL
 class LocationRepository {
     suspend fun searchLocations(query: String, userLat: Double, userLon: Double): List<PhotonResult> = withContext(Dispatchers.IO) {
         try {
-            // Curățăm query-ul pentru URL
             val encodedQuery = query.replace(" ", "+")
             val urlString = "https://photon.komoot.io/api/?q=$encodedQuery&lat=$userLat&lon=$userLon&limit=5"
 

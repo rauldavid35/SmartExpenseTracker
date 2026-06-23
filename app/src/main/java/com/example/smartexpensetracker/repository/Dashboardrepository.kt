@@ -10,11 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/**
- * Fully offline, local-only dashboard storage via SharedPreferences + JSON.
- * Scoped per user via [userId] so each account has its own dashboards.
- * No Firebase, no network calls.
- */
+
 class DashboardRepository(context: Context, userId: String) {
 
     private val prefs = context.getSharedPreferences("dashboards_$userId", Context.MODE_PRIVATE)
@@ -23,7 +19,6 @@ class DashboardRepository(context: Context, userId: String) {
     private val _dashboards = MutableStateFlow<List<Dashboard>>(load())
     val dashboards: Flow<List<Dashboard>> = _dashboards.asStateFlow()
 
-    // ── Read ──────────────────────────────────────────────────────────────────
 
     private fun load(): List<Dashboard> {
         val raw = prefs.getString(KEY, null) ?: return emptyList()
@@ -44,7 +39,6 @@ class DashboardRepository(context: Context, userId: String) {
         } catch (_: Exception) { emptyList() }
     }
 
-    // ── Write ─────────────────────────────────────────────────────────────────
 
     private fun save(list: List<Dashboard>) {
         val arr = JSONArray()
@@ -61,7 +55,6 @@ class DashboardRepository(context: Context, userId: String) {
         _dashboards.value = list
     }
 
-    // ── CRUD ──────────────────────────────────────────────────────────────────
 
     fun createDashboard(name: String, widgets: List<WidgetType>): Dashboard {
         val dashboard = Dashboard(

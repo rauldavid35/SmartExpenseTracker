@@ -50,7 +50,6 @@ fun MainScreen(
     var showShakeMenu by remember { mutableStateOf(false) }
     var showExportSheet by remember { mutableStateOf(false) }
 
-    // Shared BudgetViewModel so the drawer export sheet uses the same data
     val budgetViewModel: BudgetViewModel = viewModel(
         factory = BudgetViewModel.Factory(context)
     )
@@ -119,7 +118,6 @@ fun MainScreen(
                     )
                 }
                 composable("budget") {
-                    // Pass the shared viewModel so dashboards/export share state
                     BudgetScreen(
                         onMenuClick = { scope.launch { drawerState.open() } },
                         viewModel = budgetViewModel
@@ -181,7 +179,6 @@ fun MainScreen(
         }
     }
 
-    // ── Export bottom sheet ──────────────────────────────────────────────────
     if (showExportSheet) {
         ExportBottomSheet(
             viewModel = budgetViewModel,
@@ -189,7 +186,6 @@ fun MainScreen(
         )
     }
 
-    // ── Shake quick-actions dialog ───────────────────────────────────────────
     if (showShakeMenu) {
         Dialog(onDismissRequest = { showShakeMenu = false }) {
             Card(

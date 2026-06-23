@@ -51,7 +51,6 @@ fun HomeScreenWithFirebase(
     val snackbarHost    = remember { SnackbarHostState() }
     var voiceResult     by remember { mutableStateOf<VoiceParseResult?>(null) }
 
-    // ── Date/time picker helpers ──────────────────────────────────────────────
     fun openReminderPicker() {
         val now = Calendar.getInstance()
         DatePickerDialog(
@@ -90,7 +89,6 @@ fun HomeScreenWithFirebase(
                 .padding(padding)
         ) {
             item {
-                // ── Top bar ───────────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -106,7 +104,6 @@ fun HomeScreenWithFirebase(
                     }
                 }
 
-                // ── Welcome ───────────────────────────────────────────────────
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -128,7 +125,6 @@ fun HomeScreenWithFirebase(
 
                 Spacer(Modifier.height(32.dp))
 
-                // ── Notes card ────────────────────────────────────────────────
                 Card(
                     modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -149,7 +145,6 @@ fun HomeScreenWithFirebase(
 
                         Spacer(Modifier.height(16.dp))
 
-                        // ── Input row ─────────────────────────────────────────
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value         = noteText,
@@ -165,7 +160,6 @@ fun HomeScreenWithFirebase(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // Voice
                             IconButton(
                                 onClick  = { voiceResult = null; showVoiceDialog = true },
                                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(LightMint)
@@ -175,7 +169,6 @@ fun HomeScreenWithFirebase(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // Add
                             FloatingActionButton(
                                 onClick = {
                                     if (noteText.isNotBlank()) {
@@ -196,7 +189,6 @@ fun HomeScreenWithFirebase(
                             }
                         }
 
-                        // ── Reminder row ──────────────────────────────────────
                         Spacer(Modifier.height(10.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -272,7 +264,6 @@ fun HomeScreenWithFirebase(
         }
     }
 
-    // ── Voice dialog ──────────────────────────────────────────────────────────
     if (showVoiceDialog) {
         VoiceInputDialog(
             mode        = VoiceParseMode.NOTE,
@@ -293,7 +284,6 @@ fun HomeScreenWithFirebase(
     }
 }
 
-// ── NoteItemFirebase ──────────────────────────────────────────────────────────
 
 @Composable
 fun NoteItemFirebase(

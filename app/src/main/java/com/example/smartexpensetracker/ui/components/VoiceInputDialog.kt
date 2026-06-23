@@ -49,7 +49,6 @@ fun VoiceInputDialog(
     var isListening    by remember { mutableStateOf(false) }
     var rawTranscript  by remember { mutableStateOf("") }
 
-    // ── SpeechRecognizer lifecycle — created once, destroyed on dialog exit ───
     val recognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(context))
             SpeechRecognizer.createSpeechRecognizer(context)
@@ -62,7 +61,6 @@ fun VoiceInputDialog(
         }
     }
 
-    // Wire up the recognition listener once
     LaunchedEffect(recognizer) {
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?)  { isListening = true }
@@ -73,7 +71,6 @@ fun VoiceInputDialog(
             override fun onEvent(eventType: Int, params: Bundle?) { }
 
             override fun onEndOfSpeech() {
-                // Don't set isListening = false here — wait for result/error
             }
 
             override fun onResults(results: Bundle?) {
@@ -89,8 +86,6 @@ fun VoiceInputDialog(
 
             override fun onError(error: Int) {
                 isListening = false
-                // ERROR_SPEECH_TIMEOUT or ERROR_NO_MATCH with partial = user stopped early
-                // Silently stay on listening phase so user can try again
             }
         })
     }
@@ -104,7 +99,6 @@ fun VoiceInputDialog(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE,            VoiceParser.STT_LOCALE)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, VoiceParser.STT_LOCALE)
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
-            // Remove the system dialog prompt — we have our own UI
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
@@ -113,7 +107,6 @@ fun VoiceInputDialog(
     }
 
     fun stopListening() {
-        // stopListening() triggers onResults with whatever was heard so far
         recognizer?.stopListening()
     }
 
@@ -178,7 +171,6 @@ fun VoiceInputDialog(
     }
 }
 
-// ── ListeningPhase ────────────────────────────────────────────────────────────
 
 @Composable
 private fun ListeningPhase(
@@ -250,8 +242,6 @@ private fun ListeningPhase(
     }
 }
 
-// ── ParsingPhase ──────────────────────────────────────────────────────────────
-
 @Composable
 private fun ParsingPhase(rawTranscript: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -271,7 +261,6 @@ private fun ParsingPhase(rawTranscript: String) {
     }
 }
 
-// ── PreviewPhase ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun PreviewPhase(
@@ -374,8 +363,6 @@ private fun PreviewPhase(
         }
     }
 }
-
-// ── PreviewField ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun PreviewField(label: String, value: String, icon: ImageVector) {

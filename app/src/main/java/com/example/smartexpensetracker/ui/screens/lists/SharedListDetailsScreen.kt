@@ -23,15 +23,6 @@ import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 import com.example.smartexpensetracker.viewmodel.SharedListsViewModel
 
-/**
- * Detail screen for a single shared list. Real-time sync across all members.
- *
- * When offline:
- *   - Item checkboxes still work (Firestore queues toggles locally and syncs later)
- *   - Adding new items is disabled
- *   - Deleting items is disabled
- *   - A yellow banner explains the current state to the user
- */
 @Composable
 fun SharedListDetailScreen(
     listId: String,
@@ -45,7 +36,6 @@ fun SharedListDetailScreen(
     val isOnline by viewModel.isOnline.collectAsState()
     var newItemText by remember { mutableStateOf("") }
 
-    // Start listening on enter, stop on leave to avoid wasted listeners.
     DisposableEffect(listId) {
         viewModel.startListeningItems(listId)
         onDispose { viewModel.stopListeningItems() }
@@ -61,7 +51,6 @@ fun SharedListDetailScreen(
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
-        // ── Top bar ──────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -81,7 +70,6 @@ fun SharedListDetailScreen(
             }
         }
 
-        // ── Offline banner ───────────────────────────────────────────────────
         if (!isOnline) {
             Surface(
                 color = Color(0xFFFFF3CD),
@@ -103,7 +91,6 @@ fun SharedListDetailScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        // ── Add item input ───────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -136,7 +123,6 @@ fun SharedListDetailScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Items list ───────────────────────────────────────────────────────
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -165,7 +151,6 @@ fun SharedListDetailScreen(
                         modifier = Modifier.padding(12.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Checkbox is ALWAYS enabled — it's the only offline write allowed.
                         Checkbox(
                             checked = item.checked,
                             onCheckedChange = { isChecked ->

@@ -52,7 +52,6 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // ── Top bar ───────────────────────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMenuClick) {
                     Icon(Icons.Default.Menu, null, tint = PrimaryGreen)
@@ -63,7 +62,6 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Budget cycle ──────────────────────────────────────────────────
             SectionHeader("Budget Cycle")
 
             SettingsRow(
@@ -112,7 +110,6 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Privacy & display ─────────────────────────────────────────────
             SectionHeader("Privacy & Display")
 
             SettingsToggleRow(
@@ -133,7 +130,6 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
         }
     }
 
-    // ── Day picker dialog (1–28) ──────────────────────────────────────────────
     if (showDayPicker) {
         ResetDayPickerDialog(
             current  = budgetResetDay,
@@ -147,7 +143,6 @@ fun SettingsScreen(onMenuClick: () -> Unit) {
     }
 }
 
-// ── Reset Day Picker ──────────────────────────────────────────────────────────
 
 @Composable
 private fun ResetDayPickerDialog(
@@ -187,8 +182,6 @@ private fun ResetDayPickerDialog(
         }
     )
 }
-
-// ── Row composables ───────────────────────────────────────────────────────────
 
 @Composable
 private fun SectionHeader(text: String) {

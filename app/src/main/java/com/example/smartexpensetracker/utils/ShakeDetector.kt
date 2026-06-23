@@ -10,7 +10,6 @@ class ShakeDetector(
     private val onShakeDetected: () -> Unit
 ) : SensorEventListener {
 
-    // Slightly higher threshold to prevent accidental triggers in pocket
     private val SHAKE_THRESHOLD_GRAVITY = 2.7F
     private val SHAKE_SLOP_TIME_MS = 500
     private var mShakeTimestamp: Long = 0
@@ -27,7 +26,6 @@ class ShakeDetector(
 
             if (gForce > SHAKE_THRESHOLD_GRAVITY) {
                 val now = System.currentTimeMillis()
-                // Ignore shakes that happen too close together
                 if (mShakeTimestamp + SHAKE_SLOP_TIME_MS > now) {
                     return
                 }

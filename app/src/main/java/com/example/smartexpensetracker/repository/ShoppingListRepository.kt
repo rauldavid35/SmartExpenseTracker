@@ -17,8 +17,6 @@ class ShoppingListRepository {
     private fun getItemsCollection(userId: String, listId: String) =
         getListsCollection(userId).document(listId).collection("items")
 
-    // --- Lists ---
-
     fun getLists(userId: String): Flow<List<ShoppingListData>> = callbackFlow {
         val subscription = getListsCollection(userId)
             .addSnapshotListener { snapshot, _ ->
@@ -58,7 +56,6 @@ class ShoppingListRepository {
         getListsCollection(userId).document(listId).update("itemCount", count).await()
     }
 
-    // --- Items ---
 
     fun getItems(userId: String, listId: String): Flow<List<ShoppingItem>> = callbackFlow {
         val subscription = getItemsCollection(userId, listId)

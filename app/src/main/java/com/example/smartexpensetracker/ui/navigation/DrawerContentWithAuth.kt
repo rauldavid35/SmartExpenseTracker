@@ -16,15 +16,11 @@ import androidx.compose.ui.unit.dp
 import com.example.smartexpensetracker.ui.theme.LightMint
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 
-/**
- * Navigation drawer.
- * Pass onExport lambda – the composable that calls it should open ExportBottomSheet.
- */
 @Composable
 fun DrawerContentWithAuth(
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit,
-    onExport: () -> Unit = {}          // ← NEW
+    onExport: () -> Unit = {}
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(
@@ -32,7 +28,6 @@ fun DrawerContentWithAuth(
                 .fillMaxWidth()
                 .padding(vertical = 24.dp)
         ) {
-            // ── Header ─────────────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -54,7 +49,6 @@ fun DrawerContentWithAuth(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Main navigation items ──────────────────────────────────────
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Person, null) },
                 label = { Text("Profile") },
@@ -100,7 +94,6 @@ fun DrawerContentWithAuth(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
 
-            // ── Export item ────────────────────────────────────────────────
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Share, null, tint = PrimaryGreen) },
                 label = { Text("Export Data", color = PrimaryGreen) },
@@ -122,7 +115,6 @@ fun DrawerContentWithAuth(
             Spacer(Modifier.weight(1f))
             HorizontalDivider()
 
-            // ── Logout ─────────────────────────────────────────────────────
             NavigationDrawerItem(
                 icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null, tint = MaterialTheme.colorScheme.error) },
                 label = { Text("Log Out", color = MaterialTheme.colorScheme.error) },

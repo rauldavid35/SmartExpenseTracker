@@ -20,16 +20,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.ui.theme.TextSecondary
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LocationConsentDialog
-//
-// Shown once before the first product scan. The user's choice is persisted in
-// `locationConsentGranted` state in ExpensesScreen for the session.
-//
-// Allow  → GPS coords resolved → countryIso → local stores (eMAG, Altex…)
-// Decline → countryIso = null → international stores (Amazon, eBay)
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun LocationConsentDialog(
     onAllow: () -> Unit,
@@ -47,7 +37,6 @@ fun LocationConsentDialog(
                 modifier            = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Icon
                 Box(
                     modifier         = Modifier
                         .size(72.dp)
@@ -83,7 +72,6 @@ fun LocationConsentDialog(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // Allow button
                 Button(
                     onClick  = onAllow,
                     modifier = Modifier.fillMaxWidth(),
@@ -97,7 +85,6 @@ fun LocationConsentDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Decline button
                 OutlinedButton(
                     onClick  = onDecline,
                     modifier = Modifier.fillMaxWidth(),

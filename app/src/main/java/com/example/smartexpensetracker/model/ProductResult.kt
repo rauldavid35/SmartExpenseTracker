@@ -4,7 +4,7 @@ data class ProductResult(
     val productName: String,
     val estimatedPrice: Double,
     val currency: String,
-    val priceConfidence: String,   // "high" or "low"
+    val priceConfidence: String,
     val countryIso: String,
     val storeLinks: List<StoreLink>
 )

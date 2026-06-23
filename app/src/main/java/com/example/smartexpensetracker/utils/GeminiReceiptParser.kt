@@ -66,10 +66,6 @@ private fun storesFor(countryIso: String?): List<StoreTemplate> =
 private fun buildSearchUrl(template: String, productName: String): String =
     template.replace("{QUERY}", URLEncoder.encode(productName, "UTF-8"))
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GeminiReceiptParser
-// ─────────────────────────────────────────────────────────────────────────────
-
 class GeminiReceiptParser(private val apiKey: String) {
 
     private val safetySettings = listOf(
@@ -84,8 +80,6 @@ class GeminiReceiptParser(private val apiKey: String) {
         apiKey         = apiKey,
         safetySettings = safetySettings
     )
-
-    // ── Receipt parsing ───────────────────────────────────────────────────────
 
     suspend fun parseReceiptText(rawText: String): ReceiptResult? {
         return withContext(Dispatchers.IO) {
@@ -135,8 +129,6 @@ class GeminiReceiptParser(private val apiKey: String) {
             }
         }
     }
-
-    // ── Product identification — location-aware ───────────────────────────────
 
     suspend fun identifyProduct(
         image: Bitmap,
@@ -197,8 +189,6 @@ class GeminiReceiptParser(private val apiKey: String) {
             }
         }
     }
-
-    // ── Private parsers ───────────────────────────────────────────────────────
 
     private fun parseProductResponse(
         aiOutput: String,

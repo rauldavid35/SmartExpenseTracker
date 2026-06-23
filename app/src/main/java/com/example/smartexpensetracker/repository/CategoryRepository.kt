@@ -35,7 +35,6 @@ class CategoryRepository {
         "Shopping"
     )
 
-    // Romanian → English mapping used for migration
     private val romanianToEnglish = mapOf(
         "Mâncare"      to "Food",
         "Mancare"      to "Food",
@@ -55,11 +54,6 @@ class CategoryRepository {
         }
     }
 
-    /**
-     * Call this ONCE for existing users who have Romanian categories.
-     * It deletes each Romanian category and creates its English equivalent.
-     * Safe to call multiple times — already-English categories are skipped.
-     */
     suspend fun migrateToEnglishCategories(userId: String) {
         val collection = getCollection(userId)
         val current    = collection.get().await()
@@ -68,14 +62,11 @@ class CategoryRepository {
             val romanian = doc.id
             val english  = romanianToEnglish[romanian]
             if (english != null && english != romanian) {
-                // Delete the Romanian doc
                 collection.document(romanian).delete().await()
-                // Create the English doc (skip if already exists)
                 collection.document(english).set(mapOf("active" to true)).await()
             }
         }
 
-        // Ensure all defaults exist (handles partial migrations)
         defaultCategories.forEach { cat ->
             val exists = collection.document(cat).get().await().exists()
             if (!exists) collection.document(cat).set(mapOf("active" to true)).await()

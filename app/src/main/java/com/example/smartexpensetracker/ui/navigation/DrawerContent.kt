@@ -60,7 +60,7 @@ fun DrawerContent(onNavigate: (String) -> Unit) {
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                IconButton(onClick = { /* Close drawer - handled by parent */ }) {
+                IconButton(onClick = { }) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
@@ -71,7 +71,6 @@ fun DrawerContent(onNavigate: (String) -> Unit) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Navigation Items
             DrawerMenuItem(
                 icon = Icons.Default.Home,
                 label = "Home",
@@ -98,7 +97,6 @@ fun DrawerContent(onNavigate: (String) -> Unit) {
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Pro Tip
             Card(
                 modifier = Modifier
                     .fillMaxWidth()

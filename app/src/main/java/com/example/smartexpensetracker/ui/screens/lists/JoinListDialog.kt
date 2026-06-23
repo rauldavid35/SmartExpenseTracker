@@ -12,11 +12,6 @@ import com.example.smartexpensetracker.model.RedeemResult
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
 import com.example.smartexpensetracker.viewmodel.SharedListsViewModel
 
-/**
- * Lets a user type a 6-character invite code to join an existing shared list.
- *
- * Shows live feedback for each failure mode (expired, used, etc.).
- */
 @Composable
 fun JoinListDialog(
     viewModel: SharedListsViewModel,
@@ -41,7 +36,6 @@ fun JoinListDialog(
                 OutlinedTextField(
                     value = code,
                     onValueChange = { newValue ->
-                        // Limit length, uppercase, strip whitespace
                         val cleaned = newValue.uppercase().filter { it.isLetterOrDigit() }.take(6)
                         code = cleaned
                         errorText = null

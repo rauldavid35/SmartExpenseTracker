@@ -123,8 +123,6 @@ class VoiceParser(apiKey: String) {
         }
     }
 
-    // ── Offline: Expenses ─────────────────────────────────────────────────────
-
     internal fun offlineParseExpense(
         transcript: String,
         knownCategories: List<String>
@@ -196,8 +194,6 @@ class VoiceParser(apiKey: String) {
         transcript: String
     ): VoiceParseResult.ShoppingListResult {
 
-        // ── Step 1: strip leading command words ───────────────────────────────
-        // "add a", "create my", "make a new", "please add", etc.
         val commandPrefix = Regex(
             """^(?:please\s+)?(?:add|create|make|start|new|open|build)(?:\s+(?:a|an|the|my|new))?\s+""",
             RegexOption.IGNORE_CASE
@@ -206,22 +202,16 @@ class VoiceParser(apiKey: String) {
 
         var listName: String? = null
 
-        // ── Step 2: detect an explicit list name ──────────────────────────────
-
-        // Pattern A: "Weekend list: milk bread" / "Weekend list with milk"
-        // Negative lookahead ensures we don't capture "list" inside the name group
         val listKeyword = Regex(
             """^((?:(?!list\b)[\w\sÀ-žÁ-ź])+?)\s+list\s*(?::|with|of|for|and)?\s+(.+)""",
             RegexOption.IGNORE_CASE
         )
 
-        // Pattern B: "lista cumparaturi: milk bread"
         val listaPattern = Regex(
             """^lista\s+([\w\sÀ-žÁ-ź]{1,30}?)\s*[:\-]?\s*(.+)""",
             RegexOption.IGNORE_CASE
         )
 
-        // Pattern C: "Pharmacy: aspirin vitamins" (explicit colon separator)
         val colonPattern = Regex(
             """^([A-Z][A-Za-zÀ-žÁ-ź\s]{1,25}):\s*(.+)"""
         )
@@ -239,12 +229,8 @@ class VoiceParser(apiKey: String) {
             }
         }
 
-        // No strong signal → safe default, keep ALL words as items
         if (listName == null) listName = "Shopping List"
 
-        // ── Step 3: split remaining text into items ───────────────────────────
-
-        // Primary delimiters: comma and explicit conjunctions
         val explicitDelimiter = Regex(
             """(?i)\s*,\s*|\s+(?:and|then|also|plus|with|si|și|cu)\s+"""
         )
@@ -252,8 +238,6 @@ class VoiceParser(apiKey: String) {
             .map { it.trim().replaceFirstChar { c -> c.uppercase() } }
             .filter { it.isNotBlank() && it.length > 1 }
 
-        // Fallback: if still 0 or 1 item, split on every space
-        // Handles "milk bread eggs" (natural pauses → STT outputs space-separated words)
         if (rawItems.size <= 1 && working.contains(' ')) {
             rawItems = working.split(Regex("""\s+"""))
                 .map { it.trim().replaceFirstChar { c -> c.uppercase() } }
@@ -269,8 +253,6 @@ class VoiceParser(apiKey: String) {
             listName = listName, items = items, confidence = confidence
         )
     }
-
-    // ── JSON helpers ──────────────────────────────────────────────────────────
 
     private fun parseExpenseJson(
         raw: String,

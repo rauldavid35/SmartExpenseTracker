@@ -18,32 +18,13 @@ import com.example.smartexpensetracker.utils.UserPreferences
 import com.example.smartexpensetracker.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
-// ── Composition local so any screen can read privacyMode without prop-drilling ─
 val LocalPrivacyMode = staticCompositionLocalOf { false }
 
-// ── Privacy helpers ───────────────────────────────────────────────────────────
-//
-// MoneyText is the canonical way to render any monetary value in the UI.
-// When privacy mode is on, it replaces digits with bullets so the layout
-// stays roughly the same width but the actual figure is hidden.
-//
-// Pattern: replace every Text("$${...amount...}") with MoneyText("$${...amount...}").
-// The currency symbol / sign / formatting stays — only digits get masked.
-
-/**
- * Mask digits in a money string with • characters when [masked] is true.
- * Keeps non-digit characters (currency symbols, signs, spaces, decimal separators)
- * so the result reads as e.g. "$••••.••" instead of leaking the magnitude.
- */
 fun maskMoney(value: String, masked: Boolean): String =
     if (!masked) value else buildString(value.length) {
         for (c in value) append(if (c.isDigit()) '•' else c)
     }
 
-/**
- * Drop-in replacement for `Text(...)` for any monetary value.
- * Reads [LocalPrivacyMode] and masks digits automatically.
- */
 @Composable
 fun MoneyText(
     text: String,
@@ -69,14 +50,12 @@ fun MainApp(
     val authState by authViewModel.authState.collectAsState()
     val context   = LocalContext.current
 
-    // ── Per-user preferences ──────────────────────────────────────────────────
     val uid   = authState.user?.uid ?: "local"
     val prefs = remember(uid) { UserPreferences(context, uid) }
 
     val darkMode    by prefs.darkMode.collectAsState()
     val privacyMode by prefs.privacyMode.collectAsState()
 
-    // ── Biometric state ───────────────────────────────────────────────────────
     val sharedPrefs = remember {
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     }
@@ -130,7 +109,7 @@ fun MainApp(
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
-            else -> { /* failed attempt or null — let user retry */ }
+            else -> { }
         }
     }
 
@@ -142,7 +121,6 @@ fun MainApp(
         }
     }
 
-    // ── Wrap everything in theme + privacy local ──────────────────────────────
     SmartExpenseTrackerTheme(darkTheme = darkMode) {
         CompositionLocalProvider(LocalPrivacyMode provides privacyMode) {
 

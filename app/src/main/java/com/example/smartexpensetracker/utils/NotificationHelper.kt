@@ -12,8 +12,6 @@ import androidx.core.app.NotificationCompat
 import com.example.smartexpensetracker.MainActivity
 import com.example.smartexpensetracker.R
 
-// ─── Notification channels ────────────────────────────────────────────────────
-
 object NotificationHelper {
 
     const val CHANNEL_REMINDERS    = "note_reminders"
@@ -39,12 +37,6 @@ object NotificationHelper {
         )
     }
 
-    // ── Note reminder ─────────────────────────────────────────────────────────
-
-    /**
-     * Schedule a local notification for a note at [triggerAtMillis].
-     * [noteId] is used as the notification ID so it can be cancelled later.
-     */
     fun scheduleNoteReminder(context: Context, noteId: Int, noteText: String, triggerAtMillis: Long) {
         val intent = Intent(context, NoteReminderReceiver::class.java).apply {
             putExtra("note_id",   noteId)
@@ -55,7 +47,6 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        // Use setExactAndAllowWhileIdle so it fires even in Doze mode
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (am.canScheduleExactAlarms()) {
                 am.setExactAndAllowWhileIdle(
@@ -80,8 +71,6 @@ object NotificationHelper {
             .cancel(noteId)
     }
 
-    // ── Budget reset notification ─────────────────────────────────────────────
-
     fun showBudgetResetNotification(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val intent = Intent(context, MainActivity::class.java)
@@ -99,10 +88,6 @@ object NotificationHelper {
         nm.notify(1001, notif)
     }
 
-    /**
-     * Schedule a repeating budget-reset alarm at [resetDayOfMonth].
-     * The next occurrence is calculated automatically.
-     */
     fun scheduleBudgetResetAlarm(context: Context, resetDayOfMonth: Int) {
         val intent = Intent(context, BudgetResetReceiver::class.java)
         val pi = PendingIntent.getBroadcast(
@@ -117,7 +102,6 @@ object NotificationHelper {
             set(java.util.Calendar.MINUTE, 0)
             set(java.util.Calendar.SECOND, 0)
             set(java.util.Calendar.MILLISECOND, 0)
-            // If today is past the reset day this month, schedule for next month
             if (timeInMillis <= System.currentTimeMillis()) add(java.util.Calendar.MONTH, 1)
         }
         am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
@@ -132,8 +116,6 @@ object NotificationHelper {
         (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pi)
     }
 }
-
-// ─── BroadcastReceivers ───────────────────────────────────────────────────────
 
 class NoteReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

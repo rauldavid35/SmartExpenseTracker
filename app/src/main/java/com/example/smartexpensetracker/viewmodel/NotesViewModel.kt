@@ -54,7 +54,6 @@ class NotesViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             repository.addNote(userId, text, remindAt)
             if (remindAt != null) {
-                // Use a stable positive Int as alarm/notification ID
                 val alarmId = (text + remindAt).hashCode().and(0x7FFFFFFF)
                 NotificationHelper.scheduleNoteReminder(context, alarmId, text, remindAt)
             }
@@ -70,8 +69,6 @@ class NotesViewModel(private val context: Context) : ViewModel() {
         }
         viewModelScope.launch { repository.deleteNote(userId, noteId) }
     }
-
-    // ── Factory ───────────────────────────────────────────────────────────────
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =

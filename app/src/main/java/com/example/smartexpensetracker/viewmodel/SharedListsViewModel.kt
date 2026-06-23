@@ -15,21 +15,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * ViewModel for shared lists.
- *
- * Completely separate from [ListsViewModel] which still handles personal lists.
- * No state is shared between the two, no Firestore paths overlap.
- *
- * All write operations except [toggleItem] require an active internet connection.
- * Reads work offline via Firestore's local cache.
- */
 class SharedListsViewModel : ViewModel() {
 
     private val auth       = FirebaseAuth.getInstance()
     private val repository = SharedListRepository()
-
-    // ── State ────────────────────────────────────────────────────────────────
 
     private val _sharedLists = MutableStateFlow<List<SharedListData>>(emptyList())
     val sharedLists: StateFlow<List<SharedListData>> = _sharedLists.asStateFlow()
@@ -46,7 +35,6 @@ class SharedListsViewModel : ViewModel() {
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
-    // Exposed for UI banners and to disable buttons when offline.
     val isOnline: StateFlow<Boolean> = NetworkMonitor.isOnline
 
     private var listsJob:    Job? = null
@@ -87,7 +75,7 @@ class SharedListsViewModel : ViewModel() {
         listsJob = viewModelScope.launch {
             try {
                 repository.getSharedLists(uid).collect { _sharedLists.value = it }
-            } catch (_: Exception) { /* ignore — logout race */ }
+            } catch (_: Exception) { }
         }
     }
 
@@ -95,14 +83,9 @@ class SharedListsViewModel : ViewModel() {
         invitesJob = viewModelScope.launch {
             try {
                 repository.getPendingInvitesForEmail(email).collect { _pendingInvites.value = it }
-            } catch (_: Exception) { /* ignore */ }
+            } catch (_: Exception) { }
         }
     }
-
-    /**
-     * Returns true if we have internet. Otherwise sets a user-visible message
-     * and returns false — callers should `return` early when this returns false.
-     */
     private fun requireOnline(action: String): Boolean {
         if (!NetworkMonitor.isOnline.value) {
             _userMessage.value = "You're offline — $action requires internet"
@@ -110,8 +93,6 @@ class SharedListsViewModel : ViewModel() {
         }
         return true
     }
-
-    // ── List operations ──────────────────────────────────────────────────────
 
     fun createList(name: String) {
         val user = auth.currentUser ?: return
@@ -148,8 +129,6 @@ class SharedListsViewModel : ViewModel() {
         }
     }
 
-    // ── Items ────────────────────────────────────────────────────────────────
-
     fun startListeningItems(listId: String) {
         val uid = auth.currentUser?.uid ?: return
         itemsJob?.cancel()
@@ -183,11 +162,6 @@ class SharedListsViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Checking/unchecking is the ONLY write operation allowed offline.
-     * Firestore queues the toggle locally and syncs when the device reconnects;
-     * last-write-wins is acceptable for boolean check states.
-     */
     fun toggleItem(listId: String, itemId: String, checked: Boolean) {
         viewModelScope.launch {
             try { repository.toggleItem(listId, itemId, checked) }
@@ -202,8 +176,6 @@ class SharedListsViewModel : ViewModel() {
             catch (e: Exception) { _userMessage.value = "Delete failed: ${e.message}" }
         }
     }
-
-    // ── Sharing ──────────────────────────────────────────────────────────────
 
     fun generateInviteCode(list: SharedListData) {
         val user = auth.currentUser ?: return

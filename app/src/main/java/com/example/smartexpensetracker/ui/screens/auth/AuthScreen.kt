@@ -67,7 +67,6 @@ fun AuthScreen(
 
         Spacer(Modifier.height(32.dp))
 
-        // ── Email ─────────────────────────────────────────────────────────────
         OutlinedTextField(
             value         = email,
             onValueChange = { email = it },
@@ -79,7 +78,6 @@ fun AuthScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Password ──────────────────────────────────────────────────────────
         OutlinedTextField(
             value         = password,
             onValueChange = { password = it },
@@ -99,7 +97,6 @@ fun AuthScreen(
             shape    = RoundedCornerShape(12.dp)
         )
 
-        // ── Recovery email (sign-up only) ─────────────────────────────────────
         if (!isLogin) {
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
@@ -112,7 +109,6 @@ fun AuthScreen(
             )
         }
 
-        // ── Forgot password (login only) ──────────────────────────────────────
         if (isLogin) {
             Spacer(Modifier.height(6.dp))
             Text(
@@ -164,8 +160,6 @@ fun AuthScreen(
         )
     }
 }
-
-// ── Forgot Password Dialog ────────────────────────────────────────────────────
 
 @Composable
 private fun ForgotPasswordDialog(

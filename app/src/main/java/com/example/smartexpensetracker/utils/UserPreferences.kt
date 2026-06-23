@@ -5,20 +5,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Local preferences scoped per user (currency, dark mode, privacy mode, budget cycle).
- *
- * IMPORTANT: This must be a per-userId singleton.
- * Every screen that observes prefs must see the SAME MutableStateFlow instance,
- * otherwise a write in SettingsScreen won't recompose MainApp's theme/privacy
- * wrapper. Use [get] (or the legacy constructor delegate) to obtain instances.
- */
 class UserPreferences private constructor(context: Context, userId: String) {
 
     private val prefs = context.applicationContext
         .getSharedPreferences("user_prefs_$userId", Context.MODE_PRIVATE)
 
-    // ── Keys ──────────────────────────────────────────────────────────────────
     companion object {
         const val KEY_CURRENCY          = "currency"
         const val KEY_DARK_MODE         = "dark_mode"
@@ -32,9 +23,6 @@ class UserPreferences private constructor(context: Context, userId: String) {
             "INR" to "₹", "BRL" to "R$", "MXN" to "MX$", "SEK" to "kr"
         )
 
-        // ── Per-userId singleton cache ────────────────────────────────────────
-        // Without this, every screen builds its own MutableStateFlow and writes
-        // from one screen don't propagate to observers on another.
         @Volatile
         private var instances: MutableMap<String, UserPreferences> = mutableMapOf()
 
@@ -45,16 +33,10 @@ class UserPreferences private constructor(context: Context, userId: String) {
                 }
             }
 
-        /**
-         * Legacy constructor-style call site:
-         *   `UserPreferences(context, uid)` continues to work and returns the
-         *   shared singleton. Existing screens don't need to change.
-         */
         operator fun invoke(context: Context, userId: String): UserPreferences =
             get(context, userId)
     }
 
-    // ── Backed state flows (so the UI reacts without restart) ─────────────────
     private val _currency       = MutableStateFlow(prefs.getString(KEY_CURRENCY, "USD") ?: "USD")
     private val _darkMode       = MutableStateFlow(prefs.getBoolean(KEY_DARK_MODE, false))
     private val _privacyMode    = MutableStateFlow(prefs.getBoolean(KEY_PRIVACY_MODE, false))
@@ -67,7 +49,6 @@ class UserPreferences private constructor(context: Context, userId: String) {
     val budgetResetDay: StateFlow<Int>     = _budgetResetDay.asStateFlow()
     val notifyOnReset:  StateFlow<Boolean> = _notifyOnReset.asStateFlow()
 
-    // ── Setters ───────────────────────────────────────────────────────────────
     fun setCurrency(value: String) {
         prefs.edit().putString(KEY_CURRENCY, value).apply()
         _currency.value = value
@@ -94,7 +75,6 @@ class UserPreferences private constructor(context: Context, userId: String) {
         _notifyOnReset.value = value
     }
 
-    /** Returns the symbol for the currently selected currency. */
     fun currencySymbol(): String =
         SUPPORTED_CURRENCIES.firstOrNull { it.first == _currency.value }?.second ?: "$"
 }

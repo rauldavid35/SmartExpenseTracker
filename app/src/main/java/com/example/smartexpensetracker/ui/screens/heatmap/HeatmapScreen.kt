@@ -41,7 +41,6 @@ data class LocationStat(
     val position: GeoPoint
 )
 
-// Sursa de hartă minimalistă și gratuită (CartoDB Positron)
 val CARTO_POSITRON = object : XYTileSource(
     "CartoPositron",
     1, 20, 256, ".png",
@@ -50,7 +49,6 @@ val CARTO_POSITRON = object : XYTileSource(
     override fun getCopyrightNotice(): String = "© OpenStreetMap, © CARTO"
 }
 
-// Overlay personalizat pentru un Heatmap cu efect de "Gradient" fin
 class ModernHeatmapOverlay(
     private val locations: List<LocationStat>,
     private val maxSpent: Double
@@ -68,15 +66,12 @@ class ModernHeatmapOverlay(
             val point = Point()
             projection.toPixels(stat.position, point)
 
-            // Raza zonei de căldură pe ecran (în pixeli)
             val radius = 100f + (stat.totalSpent / maxSpent).toFloat() * 150f
 
-            // Calculăm culoarea (Verde pentru ieftin, Roșu pentru scump)
             val intensity = (stat.totalSpent / maxSpent).toFloat()
             val r = (intensity * 255).toInt().coerceIn(0, 255)
             val g = ((1 - intensity) * 255).toInt().coerceIn(0, 255)
 
-            // Centrul e opac (alpha 180), marginile sunt complet transparente (alpha 0)
             val centerColor = android.graphics.Color.argb(180, r, g, 0)
             val edgeColor = android.graphics.Color.argb(0, r, g, 0)
 
@@ -107,9 +102,9 @@ fun HeatmapScreen(
     val locationStats = remember(expenses) {
         expenses
             .filter { tx ->
-                tx.amount < 0 &&              // expenses only — income excluded
-                        tx.latitude  != 0.0 &&        // must have real coordinates
-                        tx.longitude != 0.0           // lat=0/lng=0 means user skipped location
+                tx.amount < 0 &&
+                        tx.latitude  != 0.0 &&
+                        tx.longitude != 0.0
             }
             .groupBy { it.locationName.ifBlank { "Unknown Location" } }
             .map { (name, list) ->
@@ -127,7 +122,6 @@ fun HeatmapScreen(
     val maxSpent = locationStats.maxOfOrNull { it.totalSpent } ?: 1.0
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Header
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -139,19 +133,18 @@ fun HeatmapScreen(
             Text("Spending Heatmap", style = MaterialTheme.typography.headlineSmall)
         }
 
-        // The OpenStreetMap View
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(400.dp) // Am mărit puțin harta să arate mai impunător
+                .height(400.dp)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(24.dp)) // Colțuri mai rotunjite
+                .clip(RoundedCornerShape(24.dp))
         ) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     MapView(ctx).apply {
-                        setTileSource(CARTO_POSITRON) // AICI FOLOSIM HARTA PREMIUM
+                        setTileSource(CARTO_POSITRON)
                         setMultiTouchControls(true)
                         controller.setZoom(14.0)
 
@@ -162,19 +155,16 @@ fun HeatmapScreen(
                 update = { mapView ->
                     mapView.overlays.clear()
 
-                    // 1. Adăugăm stratul de Heatmap (pete de culoare fine)
                     if (locationStats.isNotEmpty()) {
                         mapView.overlays.add(ModernHeatmapOverlay(locationStats, maxSpent))
                     }
 
-                    // 2. Adăugăm markere curate peste heatmap
                     locationStats.forEach { stat ->
                         val marker = Marker(mapView)
                         marker.position = stat.position
                         marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                         marker.title = "${stat.name}\nTotal: $${String.format("%.2f", stat.totalSpent)}"
 
-                        // Iconiță implicită mică ca să nu acopere culorile
                         marker.setOnMarkerClickListener { m, _ ->
                             m.showInfoWindow()
                             true
@@ -190,7 +180,6 @@ fun HeatmapScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Text("Highest Spending Zones", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
 
-        // Top 3 List
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(top3Locations) { loc ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
