@@ -44,6 +44,7 @@ import com.example.smartexpensetracker.ui.components.ProductScanDialog
 import com.example.smartexpensetracker.ui.components.VoiceInputDialog
 import com.example.smartexpensetracker.ui.components.VoiceParseMode
 import com.example.smartexpensetracker.ui.components.takePhoto
+import com.example.smartexpensetracker.ui.navigation.LocalCurrencySymbol
 import com.example.smartexpensetracker.ui.navigation.MoneyText
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.utils.GeminiReceiptParser
@@ -78,6 +79,8 @@ fun ExpensesScreenWithFirebase(
 ) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
+
+    val symbol = LocalCurrencySymbol.current
 
     val expenses             by viewModel.expenses.collectAsState()
     val availableCategories  by viewModel.categories.collectAsState()
@@ -284,14 +287,14 @@ fun ExpensesScreenWithFirebase(
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Expenses", color = TextSecondary)
-                        MoneyText("$${String.format("%.2f", totalExpenses)}", color = ExpenseRed, style = MaterialTheme.typography.titleLarge)
+                        MoneyText(amount = totalExpenses, color = ExpenseRed, style = MaterialTheme.typography.titleLarge)
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Income", color = TextSecondary)
-                        MoneyText("$${String.format("%.2f", totalIncome)}", color = IncomeGreen, style = MaterialTheme.typography.titleLarge)
+                        MoneyText(amount = totalIncome, color = IncomeGreen, style = MaterialTheme.typography.titleLarge)
                     }
                 }
             }
@@ -369,9 +372,10 @@ fun ExpensesScreenWithFirebase(
                                     )
                                 }
                                 MoneyText(
-                                    text  = "${if (transaction.amount >= 0) "+" else ""}$${String.format("%.2f", transaction.amount)}",
-                                    color = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
-                                    style = MaterialTheme.typography.titleMedium
+                                    amount = transaction.amount,
+                                    prefix = if (transaction.amount > 0) "+" else "",
+                                    color  = if (transaction.amount >= 0) IncomeGreen else ExpenseRed,
+                                    style  = MaterialTheme.typography.titleMedium
                                 )
                             }
                         }
@@ -731,7 +735,7 @@ fun ExpensesScreenWithFirebase(
                             if (selectedCategoryName != "Income") {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    "✓ Will also extend the \"$selectedCategoryName\" budget by $${amount.ifBlank { "0" }}.",
+                                    "✓ Will also extend the \"$selectedCategoryName\" budget by ${amount.ifBlank { "0" }} $symbol.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = PrimaryGreen
                                 )
@@ -1180,7 +1184,7 @@ fun ExpensesScreenWithFirebase(
             AlertDialog(
                 onDismissRequest = { showAnomalyDialog = false; showAddDialog = true },
                 title = { Text("Unusual Amount 🚨", color = ExpenseRed) },
-                text  = { Text("The amount entered ($amount RON) is much higher than your usual average for '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nAre you sure this is correct?") },
+                text  = { Text("The amount entered ($amount $symbol) is much higher than your usual average for '$selectedCategoryName' (~${String.format("%.0f", anomalyAverage)} RON).\n\nAre you sure this is correct?") },
                 confirmButton = {
                     Button(onClick = { showAnomalyDialog = false; showLocationDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)) { Text("Yes, it's correct") }
                 },

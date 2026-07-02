@@ -25,6 +25,7 @@ import com.example.smartexpensetracker.model.SummaryStats
 import com.example.smartexpensetracker.model.CategoryBudgetView
 import com.example.smartexpensetracker.model.ExpenseTransaction
 import com.example.smartexpensetracker.ui.theme.PrimaryGreen
+import com.example.smartexpensetracker.ui.navigation.LocalCurrencySymbol
 import kotlin.math.*
 
 @Composable
@@ -189,6 +190,9 @@ fun BarChartCard(entries: List<BarEntry>, title: String = "Daily Spending", modi
 
 @Composable
 fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier = Modifier) {
+
+    val symbol = LocalCurrencySymbol.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -233,7 +237,7 @@ fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier 
                     ) {
                         Text(cat.name, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "$${String.format("%.0f", cat.spent)} / $${String.format("%.0f", cat.budget)}",
+                            "${String.format("%.0f", cat.spent)} $symbol / ${String.format("%.0f", cat.budget)} $symbol",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (cat.spent > cat.budget) Color.Red else Color.Gray
                         )
@@ -263,6 +267,9 @@ fun BudgetVsActualCard(categories: List<CategoryBudgetView>, modifier: Modifier 
 
 @Composable
 fun SummaryStatsCard(stats: SummaryStats, modifier: Modifier = Modifier) {
+
+    val symbol = LocalCurrencySymbol.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -273,14 +280,14 @@ fun SummaryStatsCard(stats: SummaryStats, modifier: Modifier = Modifier) {
             Text("Summary", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                StatTile("Total Spent", "$${String.format("%.0f", stats.totalSpent)}", PrimaryGreen)
-                StatTile("Avg / Day", "$${String.format("%.1f", stats.avgPerDay)}", Color(0xFF2196F3))
+                StatTile("Total Spent", "${String.format("%.0f", stats.totalSpent)} $symbol", PrimaryGreen)
+                StatTile("Avg / Day", "${String.format("%.1f", stats.avgPerDay)} $symbol", Color(0xFF2196F3))
                 StatTile("Transactions", "${stats.transactionCount}", Color(0xFF9C27B0))
             }
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                StatTile("Biggest", "$${String.format("%.0f", stats.biggestExpense)}", Color(0xFFF44336))
-                StatTile("Saved", "$${String.format("%.0f", (stats.totalBudget - stats.totalSpent).coerceAtLeast(0.0))}", Color(0xFF4CAF50))
+                StatTile("Biggest", "${String.format("%.0f", stats.biggestExpense)} $symbol", Color(0xFFF44336))
+                StatTile("Saved", "${String.format("%.0f", (stats.totalBudget - stats.totalSpent).coerceAtLeast(0.0))} $symbol", Color(0xFF4CAF50))
                 StatTile("Top Cat.", stats.biggestCategory.take(8), Color(0xFFFF9800))
             }
         }
@@ -297,6 +304,9 @@ private fun StatTile(label: String, value: String, color: Color) {
 
 @Composable
 fun TopExpensesCard(expenses: List<ExpenseTransaction>, modifier: Modifier = Modifier) {
+
+    val symbol = LocalCurrencySymbol.current
+
     val top = expenses
         .filter { it.amount < 0 }
         .sortedBy { it.amount }
@@ -333,7 +343,7 @@ fun TopExpensesCard(expenses: List<ExpenseTransaction>, modifier: Modifier = Mod
                         Text(tx.category, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     }
                     Text(
-                        text = "$${String.format("%.2f", -tx.amount)}",
+                        text = "${String.format("%.2f", -tx.amount)} $symbol",
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color(0xFFF44336)
                     )

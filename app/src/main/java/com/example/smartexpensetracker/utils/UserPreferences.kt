@@ -77,4 +77,9 @@ class UserPreferences private constructor(context: Context, userId: String) {
 
     fun currencySymbol(): String =
         SUPPORTED_CURRENCIES.firstOrNull { it.first == _currency.value }?.second ?: "$"
+
+    fun format(amount: Double, decimals: Int = 2): String {
+        val symbol = currencySymbol()
+        return "$symbol${String.format("%.${decimals}f", amount)}"
+    }
 }

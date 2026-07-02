@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.smartexpensetracker.model.*
 import com.example.smartexpensetracker.ui.components.CreateDashboardDialog
 import com.example.smartexpensetracker.ui.components.charts.*
+import com.example.smartexpensetracker.ui.navigation.LocalCurrencySymbol
 import com.example.smartexpensetracker.ui.navigation.MoneyText
 import com.example.smartexpensetracker.ui.theme.*
 import com.example.smartexpensetracker.viewmodel.BudgetViewModel
@@ -214,15 +215,18 @@ private fun BudgetTabContent(
                     Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
                         MoneyText(
-                            "$${String.format("%.0f", totalSpent)}",
+                            amount = totalSpent,
                             style = MaterialTheme.typography.displayMedium,
-                            color = Color.White
+                            color = Color.White,
+                            decimals = 0
                         )
                         MoneyText(
-                            " / $${String.format("%.0f", totalBudget)}",
+                            amount = totalBudget,
+                            prefix = " / ",
                             style = MaterialTheme.typography.titleLarge,
                             color = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            decimals = 0
                         )
                     }
                     Spacer(Modifier.height(12.dp))
@@ -487,6 +491,8 @@ fun EditBudgetDialog(
     onDismiss: () -> Unit,
     onSave: (Double) -> Unit
 ) {
+    val symbol = LocalCurrencySymbol.current
+
     var limitText by remember { mutableStateOf(currentLimit.toInt().toString()) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -495,7 +501,7 @@ fun EditBudgetDialog(
             OutlinedTextField(
                 value = limitText,
                 onValueChange = { limitText = it },
-                label = { Text("Total Budget ($)") },
+                label = { Text("Total Budget ($symbol)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -517,6 +523,8 @@ fun CategoryDialog(
     onSave: (String, Double, String) -> Boolean,
     onDelete: (String) -> Unit
 ) {
+    val symbol = LocalCurrencySymbol.current
+
     var name by remember { mutableStateOf(category?.name ?: "") }
     var limit by remember { mutableStateOf(category?.budget?.toString() ?: "") }
     var colorHex by remember { mutableStateOf(category?.colorHex ?: "#4CAF50") }
@@ -547,14 +555,14 @@ fun CategoryDialog(
                 OutlinedTextField(
                     value = limit,
                     onValueChange = { limit = it; showError = false },
-                    label = { Text("Limit (Available: $${String.format("%.2f", unallocatedAmount)})") },
+                    label = { Text("Limit (Available: $${String.format("%.2f", unallocatedAmount)} $symbol)") },
                     isError = isOverBudget || showError,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (isOverBudget) {
                     Text(
-                        "Exceeds unallocated amount ($${String.format("%.2f", unallocatedAmount)})",
+                        "Exceeds unallocated amount ($${String.format("%.2f", unallocatedAmount)} $symbol)",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(start = 16.dp, top = 4.dp)
@@ -625,11 +633,11 @@ fun CategoryBudgetItem(category: CategoryBudgetView, onClick: () -> Unit) {
                 Text(category.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Column(horizontalAlignment = Alignment.End) {
                     MoneyText(
-                        "$${String.format("%.2f", category.spent)}",
+                        amount = category.spent,
                         style = MaterialTheme.typography.titleMedium,
                         color = if (category.spent > category.budget) Color.Red else MaterialTheme.colorScheme.onSurface
                     )
-                    MoneyText("of $${String.format("%.2f", category.budget)}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    MoneyText(amount = category.budget, prefix = "of ", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
             }
             Spacer(Modifier.height(4.dp))

@@ -19,6 +19,7 @@ import com.example.smartexpensetracker.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
 val LocalPrivacyMode = staticCompositionLocalOf { false }
+val LocalCurrencySymbol = staticCompositionLocalOf { "$" }
 
 fun maskMoney(value: String, masked: Boolean): String =
     if (!masked) value else buildString(value.length) {
@@ -27,12 +28,25 @@ fun maskMoney(value: String, masked: Boolean): String =
 
 @Composable
 fun MoneyText(
-    text: String,
+    amount: Double,
     modifier: Modifier = Modifier,
+    prefix: String = "",
+    suffix: String = "",
     color: Color = Color.Unspecified,
-    style: TextStyle = LocalTextStyle.current
+    style: TextStyle = LocalTextStyle.current,
+    decimals: Int = 2
 ) {
     val masked = LocalPrivacyMode.current
+    val symbol = LocalCurrencySymbol.current
+
+    val isNegative = amount < 0
+    val absoluteAmount = kotlin.math.abs(amount)
+    val sign = if (isNegative) "-" else ""
+
+    val formattedNumber = String.format("%.${decimals}f", absoluteAmount)
+
+    val text = "$prefix$sign$formattedNumber $symbol$suffix"
+
     Text(
         text     = maskMoney(text, masked),
         modifier = modifier,
@@ -55,6 +69,7 @@ fun MainApp(
 
     val darkMode    by prefs.darkMode.collectAsState()
     val privacyMode by prefs.privacyMode.collectAsState()
+    val currency    by prefs.currency.collectAsState()
 
     val sharedPrefs = remember {
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -121,8 +136,12 @@ fun MainApp(
         }
     }
 
+    val currencySymbol = remember(currency) {
+        UserPreferences.SUPPORTED_CURRENCIES.firstOrNull { it.first == currency }?.second ?: "$"
+    }
+
     SmartExpenseTrackerTheme(darkTheme = darkMode) {
-        CompositionLocalProvider(LocalPrivacyMode provides privacyMode) {
+        CompositionLocalProvider(LocalPrivacyMode provides privacyMode, LocalCurrencySymbol provides currencySymbol) {
 
             if (authState.user == null) {
                 AuthScreen(
