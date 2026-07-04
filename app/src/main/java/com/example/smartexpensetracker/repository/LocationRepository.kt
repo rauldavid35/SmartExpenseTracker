@@ -28,8 +28,8 @@ class LocationRepository {
                     name = props.optString("name", "Unknown"),
                     city = props.optString("city", null),
                     street = props.optString("street", null),
-                    latitude = geom.getDouble(1), // Latitudinea e a doua în GeoJSON
-                    longitude = geom.getDouble(0)  // Longitudinea e prima
+                    latitude = geom.getDouble(1),
+                    longitude = geom.getDouble(0)
                 ))
             }
             results
